@@ -526,8 +526,24 @@ const detectChartPatterns = (candles) => {
 // ================================================================
 const fetchYahoo = async (sym, interval = "1d", range = "3mo") => {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym.toUpperCase()}?interval=${interval}&range=${range}&includePrePost=false`;
-  const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  // Try multiple CORS proxies for reliability
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://thingproxy.freeboard.io/fetch/${url}`
+  ];
+  
+  let res, error;
+  for (const proxyUrl of proxies) {
+    try {
+      res = await fetch(proxyUrl);
+      if (res.ok) break;
+    } catch (e) {
+      error = e;
+    }
+  }
+  
+  if (!res || !res.ok) throw new Error(`HTTP ${res?.status || 'Network error'}`);
   const json = await res.json();
   const result = json.chart?.result?.[0];
   if (!result) throw new Error("No data");
@@ -539,14 +555,54 @@ const fetchYahoo = async (sym, interval = "1d", range = "3mo") => {
 };
 const fetchQuickQuote = async (sym) => {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${sym.toUpperCase()}?interval=1d&range=2d`;
-  const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
-  if (!res.ok) throw new Error();
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://thingproxy.freeboard.io/fetch/${url}`
+  ];
+  
+  let res;
+  for (const proxyUrl of proxies) {
+    try {
+      res = await fetch(proxyUrl);
+      if (res.ok) break;
+    } catch {}
+  }
+  
+  if (!res || !res.ok) throw new Error();
   const json = await res.json();
   const r = json.chart?.result?.[0]; if (!r) throw new Error();
   const q = r.indicators.quote[0];
   const closes = q.close.filter(v => v !== null);
   const c = closes[closes.length - 1], p2 = closes[closes.length - 2] || c;
   return { price: c, prev: p2, pct: ((c - p2) / p2 * 100), name: r.meta?.shortName || sym };
+};
+
+// Stock search using Yahoo Finance autocomplete
+const searchStocks = async (query) => {
+  if (!query || query.length < 2) return [];
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`;
+  const proxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+  ];
+  
+  let res;
+  for (const proxyUrl of proxies) {
+    try {
+      res = await fetch(proxyUrl);
+      if (res.ok) break;
+    } catch {}
+  }
+  
+  if (!res || !res.ok) return [];
+  const json = await res.json();
+  return (json.quotes || []).map(q => ({
+    symbol: q.symbol,
+    name: q.shortname || q.longname || q.symbol,
+    type: q.quoteType || 'EQUITY',
+    exchange: q.exchange || ''
+  })).filter(q => q.symbol);
 };
 
 
@@ -709,16 +765,16 @@ function CandleChart({ candles, s20arr, s50arr, s200arr, bbarr, srLvls, showSMA2
         }}
         onMouseLeave={() => setInProg(null)}>
         <rect x={PL} y={PT} width={W - PL - PR} height={cH + gH + vH} fill="#04040c" rx={2} />
-        {gridPs.map((p, i) => (<g key={i}><line x1={PL} y1={yOf(p)} x2={W - PR} y2={yOf(p)} stroke="#0d0d20" strokeWidth={1} /><text x={PL - 5} y={yOf(p) + 4} textAnchor="end" fill="#2a3a55" fontSize={9} fontFamily="monospace">{p < 10 ? p.toFixed(4) : p < 100 ? p.toFixed(2) : p.toFixed(1)}</text></g>))}
+        {gridPs.map((p, i) => (<g key={i}><line x1={PL} y1={yOf(p)} x2={W - PR} y2={yOf(p)} stroke="#1a2a40" strokeWidth={1} /><text x={PL - 5} y={yOf(p) + 4} textAnchor="end" fill="#c8d4e8" fontSize={9} fontFamily="monospace">{p < 10 ? p.toFixed(4) : p < 100 ? p.toFixed(2) : p.toFixed(1)}</text></g>))}
         {showSR && srLvls.map((lv, i) => (<g key={i}><line x1={PL} y1={yOf(lv.p)} x2={W - PR} y2={yOf(lv.p)} stroke={lv.t === "R" ? "#ff3355" : "#00ff9d"} strokeWidth={0.8} strokeDasharray="5,4" opacity={0.5} /><text x={W - PR - 2} y={yOf(lv.p) - 2} textAnchor="end" fill={lv.t === "R" ? "#ff3355" : "#00ff9d"} fontSize={7} fontFamily="monospace" opacity={0.7}>{lv.t} {lv.p < 10 ? lv.p.toFixed(4) : lv.p.toFixed(2)}</text></g>))}
         {showBB && <><path d={mkBB(true)} fill="none" stroke="#ffcc00" strokeWidth={1} opacity={0.4} strokeDasharray="3,2" /><path d={mkBB(false)} fill="none" stroke="#ffcc00" strokeWidth={1} opacity={0.4} strokeDasharray="3,2" /></>}
         {showSMA20 && <path d={mkPath(s20arr, offset)} fill="none" stroke="#00d4ff" strokeWidth={1.5} opacity={0.85} />}
         {showSMA50 && <path d={mkPath(s50arr, offset)} fill="none" stroke="#ff8c00" strokeWidth={1.5} opacity={0.85} />}
         {showSMA200 && s200arr && <path d={mkPath(s200arr, offset)} fill="none" stroke="#ff3355" strokeWidth={1.2} opacity={0.7} strokeDasharray="6,3" />}
         {vis.map((c, i) => { const x = xOf(i), bull = c.close >= c.open, col = bull ? "#00ff9d" : "#ff3355", bt = yOf(Math.max(c.open, c.close)), bb2 = yOf(Math.min(c.open, c.close)), bH = Math.max(1, bb2 - bt); return <g key={i}><line x1={x} y1={yOf(c.high)} x2={x} y2={yOf(c.low)} stroke={col} strokeWidth={Math.max(0.8, CW / 6)} /><rect x={x - CW / 2} y={bt} width={CW} height={bH} fill={col} opacity={bull ? 0.88 : 0.82} rx={0.5} /></g>; })}
-        {showVol && <text x={PL - 5} y={PT + cH + gH + 6} textAnchor="end" fill="#1a2a40" fontSize={7} fontFamily="monospace">VOL</text>}
+        {showVol && <text x={PL - 5} y={PT + cH + gH + 6} textAnchor="end" fill="#4a5a7a" fontSize={7} fontFamily="monospace">VOL</text>}
         {showVol && vis.map((c, i) => { const x = xOf(i), bull = c.close >= c.open, h = ((c.volume || 0) / maxVol) * vH; return <rect key={i} x={x - CW / 2} y={PT + cH + gH + vH - h} width={CW} height={h} fill={bull ? "#00ff9d" : "#ff3355"} opacity={0.3} rx={0.3} />; })}
-        {vis.map((c, i) => i % Math.ceil(n / 8) === 0 ? <text key={i} x={xOf(i)} y={TH + PB - 4} textAnchor="middle" fill="#2a3a55" fontSize={8} fontFamily="monospace">{c.date}</text> : null)}
+        {vis.map((c, i) => i % Math.ceil(n / 8) === 0 ? <text key={i} x={xOf(i)} y={TH + PB - 4} textAnchor="middle" fill="#c8d4e8" fontSize={8} fontFamily="monospace">{c.date}</text> : null)}
 
         {/* ── FIBONACCI LEVELS ── */}
         {fibData && fibData.levels.map((lv, fi) => {
@@ -917,7 +973,7 @@ function RSIChart({ chartData, divergences, totalCandles }) {
   return (
     <div style={{ background: "#04040c", borderRadius: 4, padding: "6px 0 0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px 4px", fontFamily: "monospace", fontSize: 11, flexWrap: "wrap" }}>
-        <span style={{ color: "#2a3a55" }}>RSI(14)</span>
+        <span style={{ color: "#c8d4e8" }}>RSI(14)</span>
         <span style={{ color: rsiCol, fontWeight: "bold", fontSize: 13 }}>{lastRSI?.toFixed(1)}</span>
         {lastRSI > 70 && <span style={{ color: "#ff3355", fontSize: 9, border: "1px solid #ff335560", padding: "1px 5px", borderRadius: 3 }}>OVERBOUGHT</span>}
         {lastRSI < 30 && <span style={{ color: "#00ff9d", fontSize: 9, border: "1px solid #00ff9d60", padding: "1px 5px", borderRadius: 3 }}>OVERSOLD</span>}
@@ -932,12 +988,12 @@ function RSIChart({ chartData, divergences, totalCandles }) {
         <ResponsiveContainer width="100%" height={80}>
           <ComposedChart data={vis} margin={{ top: 2, right: 12, bottom: 2, left: 52 }}>
             <defs><linearGradient id="rsiGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#00d4ff" stopOpacity={0.3} /><stop offset="100%" stopColor="#00d4ff" stopOpacity={0} /></linearGradient></defs>
-            <YAxis domain={[0, 100]} tick={{ fill: "#2a3a55", fontSize: 8, fontFamily: "monospace" }} width={28} tickCount={5} />
+            <YAxis domain={[0, 100]} tick={{ fill: "#c8d4e8", fontSize: 8, fontFamily: "monospace" }} width={28} tickCount={5} />
             <ReferenceLine y={70} stroke="#ff3355" strokeDasharray="3 2" strokeOpacity={0.4} />
             <ReferenceLine y={30} stroke="#00ff9d" strokeDasharray="3 2" strokeOpacity={0.4} />
-            <ReferenceLine y={50} stroke="#1a2a40" strokeDasharray="2 3" />
+            <ReferenceLine y={50} stroke="#4a5a7a" strokeDasharray="2 3" />
             <Area type="monotone" dataKey="rsi" stroke="#00d4ff" fill="url(#rsiGrad)" dot={false} strokeWidth={1.5} connectNulls={false} />
-            <Tooltip contentStyle={{ background: "#0a0a18", border: "1px solid #1a2a40", fontSize: 10, fontFamily: "monospace", color: "#00d4ff" }} formatter={v => [v?.toFixed(2), "RSI"]} />
+            <Tooltip contentStyle={{ background: "#0a0a18", border: "1px solid #4a5a7a", fontSize: 10, fontFamily: "monospace", color: "#00d4ff" }} formatter={v => [v?.toFixed(2), "RSI"]} />
           </ComposedChart>
         </ResponsiveContainer>
         {/* SVG overlay for divergence lines on RSI */}
@@ -985,19 +1041,19 @@ function MACDChart({ chartData, divergences, totalCandles }) {
   return (
     <div style={{ background: "#04040c", borderRadius: 4, padding: "6px 0 0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px 4px", fontFamily: "monospace", fontSize: 11, flexWrap: "wrap" }}>
-        <span style={{ color: "#2a3a55" }}>MACD(12,26,9)</span>
+        <span style={{ color: "#c8d4e8" }}>MACD(12,26,9)</span>
         {last && <span style={{ color: bullish ? "#00ff9d" : "#ff3355", fontWeight: "bold" }}>{bullish ? "▲ BULL" : "▼ BEAR"}</span>}
         {divergences?.map((d, i) => <span key={i} style={{ fontSize: 8, color: d.color, border: `1px solid ${d.color}50`, padding: "1px 5px", borderRadius: 2 }}>{d.label}</span>)}
       </div>
       <div ref={wrapRef} style={{ position: "relative" }}>
       <ResponsiveContainer width="100%" height={80}>
         <ComposedChart data={vis} margin={{ top: 2, right: 12, bottom: 2, left: 52 }}>
-          <YAxis tick={{ fill: "#2a3a55", fontSize: 8, fontFamily: "monospace" }} width={28} />
-          <ReferenceLine y={0} stroke="#1a2a40" />
+          <YAxis tick={{ fill: "#c8d4e8", fontSize: 8, fontFamily: "monospace" }} width={28} />
+          <ReferenceLine y={0} stroke="#4a5a7a" />
           <Bar dataKey="macdHist" radius={[1, 1, 0, 0]}>{vis.map((d, i) => <Cell key={i} fill={d.macdHist >= 0 ? "#00ff9d" : "#ff3355"} opacity={0.65} />)}</Bar>
           <Line type="monotone" dataKey="macd" stroke="#00d4ff" dot={false} strokeWidth={1.5} connectNulls={false} />
           <Line type="monotone" dataKey="macdSig" stroke="#ff8c00" dot={false} strokeWidth={1} strokeDasharray="3 2" connectNulls={false} />
-          <Tooltip contentStyle={{ background: "#0a0a18", border: "1px solid #1a2a40", fontSize: 10, fontFamily: "monospace", color: "#c8d4e8" }} formatter={v => [v?.toFixed(5)]} />
+          <Tooltip contentStyle={{ background: "#0a0a18", border: "1px solid #4a5a7a", fontSize: 10, fontFamily: "monospace", color: "#c8d4e8" }} formatter={v => [v?.toFixed(5)]} />
         </ComposedChart>
       </ResponsiveContainer>
       </div>
@@ -1030,18 +1086,18 @@ function RiskCalculator({ setup, lastPrice }) {
 
   return (
     <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6 }}>
-      <div style={{ padding: "8px 12px", borderBottom: "1px solid #0f1525", fontSize: 10, color: "#2a3a55", letterSpacing: 2 }}>🧮 RISK CALCULATOR</div>
+      <div style={{ padding: "8px 12px", borderBottom: "1px solid #0f1525", fontSize: 10, color: "#c8d4e8", letterSpacing: 2 }}>🧮 RISK CALCULATOR</div>
       <div style={{ padding: 10 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>ACCOUNT $</div>
+            <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>ACCOUNT $</div>
             <input value={acct} onChange={e => { setAcct(e.target.value); save(e.target.value, riskPct); }}
-              style={{ width: "100%", background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, boxSizing: "border-box" }} />
+              style={{ width: "100%", background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, boxSizing: "border-box" }} />
           </div>
           <div style={{ width: 64 }}>
-            <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>RISK %</div>
+            <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>RISK %</div>
             <input value={riskPct} onChange={e => { setRiskPct(e.target.value); save(acct, e.target.value); }}
-              style={{ width: "100%", background: "#04040c", border: "1px solid #1a2a40", color: "#ffcc00", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, boxSizing: "border-box" }} />
+              style={{ width: "100%", background: "#04040c", border: "1px solid #4a5a7a", color: "#ffcc00", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, boxSizing: "border-box" }} />
           </div>
         </div>
         {[
@@ -1052,11 +1108,11 @@ function RiskCalculator({ setup, lastPrice }) {
           ["ACTUAL R:R",   rr         ? `1 : ${rr}` : "—", "#00d4ff"],
         ].map(([k, v, c]) => (
           <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #0a0a1a" }}>
-            <span style={{ color: "#2a3a55", fontSize: 8, letterSpacing: 1 }}>{k}</span>
+            <span style={{ color: "#c8d4e8", fontSize: 8, letterSpacing: 1 }}>{k}</span>
             <span style={{ color: c, fontWeight: "bold", fontSize: 10 }}>{v}</span>
           </div>
         ))}
-        {!sl && <div style={{ marginTop: 6, fontSize: 8, color: "#2a3a55", lineHeight: 1.5 }}>Run AI analysis to auto-fill entry & SL</div>}
+        {!sl && <div style={{ marginTop: 6, fontSize: 8, color: "#c8d4e8", lineHeight: 1.5 }}>Run AI analysis to auto-fill entry & SL</div>}
       </div>
     </div>
   );
@@ -1109,13 +1165,13 @@ function AIChatPanel({ ticker, tf, analysis, candles, groqKey, groqModel }) {
 
   return (
     <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "8px 12px", borderBottom: "1px solid #0f1525", fontSize: 10, color: "#2a3a55", letterSpacing: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ padding: "8px 12px", borderBottom: "1px solid #0f1525", fontSize: 10, color: "#c8d4e8", letterSpacing: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span>💬 AI CHAT</span>
-        {msgs.length > 0 && <button onClick={() => setMsgs([])} style={{ background: "none", border: "none", color: "#2a3a55", cursor: "pointer", fontSize: 9 }}>CLEAR</button>}
+        {msgs.length > 0 && <button onClick={() => setMsgs([])} style={{ background: "none", border: "none", color: "#c8d4e8", cursor: "pointer", fontSize: 9 }}>CLEAR</button>}
       </div>
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", maxHeight: 220, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
         {msgs.length === 0 && (
-          <div style={{ color: "#1a2a40", fontSize: 9, lineHeight: 1.8 }}>
+          <div style={{ color: "#4a5a7a", fontSize: 9, lineHeight: 1.8 }}>
             {["Ask about the current chart...", "→ 'What invalidates this setup?'", "→ 'Where is the next target if price breaks R?'", "→ 'How does volume confirm this signal?'"].map(t => <div key={t}>{t}</div>)}
           </div>
         )}
@@ -1130,7 +1186,7 @@ function AIChatPanel({ ticker, tf, analysis, candles, groqKey, groqModel }) {
           </div>
         ))}
         {loading && (
-          <div style={{ display: "flex", gap: 4, alignItems: "center", color: "#2a3a55" }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", color: "#c8d4e8" }}>
             <div style={{ fontSize: 14, animation: "spin 1s linear infinite" }}>◈</div>
             <span style={{ fontSize: 9 }}>Thinking...</span>
           </div>
@@ -1140,7 +1196,7 @@ function AIChatPanel({ ticker, tf, analysis, candles, groqKey, groqModel }) {
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
           placeholder={groqKey ? "Ask about this chart..." : "Add Groq key in ⚙ Settings"}
           disabled={!groqKey || loading}
-          style={{ flex: 1, background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }} />
+          style={{ flex: 1, background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }} />
         <button onClick={send} disabled={!input.trim() || !groqKey || loading}
           style={{ background: "#00d4ff15", border: "1px solid #00d4ff40", color: "#00d4ff", padding: "5px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>
           SEND
@@ -1859,11 +1915,11 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
     <div style={{ padding: 10, display: "grid", gridTemplateColumns: "190px 1fr", gap: 10, minHeight: 380 }}>
       {/* ── LEFT: asset list ── */}
       <div>
-        <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 2, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 2, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
           <span>TRACKED ({keys.length})</span>
-          <button onClick={refresh} style={{ background: "none", border: "none", color: "#2a3a55", cursor: "pointer", fontSize: 11 }}>⟳</button>
+          <button onClick={refresh} style={{ background: "none", border: "none", color: "#c8d4e8", cursor: "pointer", fontSize: 11 }}>⟳</button>
         </div>
-        {keys.length === 0 && <div style={{ color: "#1a2a40", fontSize: 9, lineHeight: 1.9 }}>No memory yet.{"\n→ Run Backtest to generate signals\n→ Close trades in Portfolio\n→ Every signal builds the database"}</div>}
+        {keys.length === 0 && <div style={{ color: "#4a5a7a", fontSize: 9, lineHeight: 1.9 }}>No memory yet.{"\n→ Run Backtest to generate signals\n→ Close trades in Portfolio\n→ Every signal builds the database"}</div>}
         {keys.map(k => {
           const e = mem[k]; const wr = parseFloat(e?.stats?.winRate || 0);
           const cs = parseFloat(e?.stats?.avgCS || 0);
@@ -1876,7 +1932,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                 <span style={{ color: col, fontSize: 11, fontWeight: "bold" }}>{wr.toFixed(0)}%</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-                <span style={{ fontSize: 8, color: "#2a3a55" }}>{e?.stats?.total || 0} sigs · CS {cs.toFixed(0)}/100</span>
+                <span style={{ fontSize: 8, color: "#c8d4e8" }}>{e?.stats?.total || 0} sigs · CS {cs.toFixed(0)}/100</span>
               </div>
               <div style={{ width: "100%", height: 3, background: "#0f1525", borderRadius: 2, marginTop: 3 }}>
                 <div style={{ width: `${Math.min(100, wr)}%`, height: "100%", background: col, borderRadius: 2 }} />
@@ -1902,7 +1958,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
               ["AVG LOSS",  `-${stats.avgLoss}%`,   "#ff3355"],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 4, padding: "4px 9px" }}>
-                <div style={{ fontSize: 7, color: "#2a3a55" }}>{l}</div>
+                <div style={{ fontSize: 7, color: "#c8d4e8" }}>{l}</div>
                 <div style={{ fontSize: 12, fontWeight: "bold", color: c }}>{v}</div>
               </div>
             ))}
@@ -1925,7 +1981,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           {/* Current conditions highlight */}
           {currentFV && (
             <div style={{ background: "#04081a", border: "1px solid #00d4ff20", borderRadius: 5, padding: "6px 10px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>NOW:</span>
+              <span style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>NOW:</span>
               <span style={{ fontSize: 9, color: "#00d4ff" }}>CS {currentCS}/100 <span style={{ color: currentCS >= 60 ? "#00ff9d" : currentCS >= 35 ? "#ffcc00" : "#ff3355" }}>({currentCSBkt})</span></span>
               {currentCSData && currentCSData.total >= 2 && <span style={{ fontSize: 9, color: "#a855f7" }}>→ {(currentCSData.wins/currentCSData.total*100).toFixed(0)}% WR ({currentCSData.total} similar)</span>}
               {currentBucketData && currentBucketData.total >= 2 && <span style={{ fontSize: 9, color: "#ffcc00" }}>Exact match: {(currentBucketData.wins/currentBucketData.total*100).toFixed(0)}% WR</span>}
@@ -1936,7 +1992,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #0f1525", flexWrap: "wrap" }}>
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
-                style={{ background: "transparent", border: "none", borderBottom: tab === t.id ? "2px solid #00d4ff" : "2px solid transparent", color: tab === t.id ? "#00d4ff" : "#2a3a55", padding: "5px 9px", cursor: "pointer", fontFamily: "monospace", fontSize: 8, letterSpacing: 1 }}>
+                style={{ background: "transparent", border: "none", borderBottom: tab === t.id ? "2px solid #00d4ff" : "2px solid transparent", color: tab === t.id ? "#00d4ff" : "#c8d4e8", padding: "5px 9px", cursor: "pointer", fontFamily: "monospace", fontSize: 8, letterSpacing: 1 }}>
                 {t.label}
                 {t.id === "failures" && failures.length > 0 && <span style={{ color: "#ff3355", marginLeft: 2 }}>({failures.length})</span>}
                 {t.id === "strategies" && strats.filter(s => s.edge === "WIN").length > 0 && <span style={{ color: "#00ff9d", marginLeft: 2 }}>({strats.filter(s => s.edge === "WIN").length}✓)</span>}
@@ -1948,22 +2004,22 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           {tab === "overview" && (
             <div style={{ maxHeight: 250, overflowY: "auto" }}>
               <div style={{ display: "grid", gridTemplateColumns: "58px 70px 42px 50px 38px 38px 38px 38px 38px 38px 48px 1fr", padding: "3px 6px", borderBottom: "1px solid #0f1525", background: "#04040c", position: "sticky", top: 0 }}>
-                {["DATE","BIAS","CONF","DIR","CS","RSI","MACD","PAT","SMC","DIV","P&L","RESULT"].map((h,i) => <div key={i} style={{ fontSize: 7, color: "#2a3a55" }}>{h}</div>)}
+                {["DATE","BIAS","CONF","DIR","CS","RSI","MACD","PAT","SMC","DIV","P&L","RESULT"].map((h,i) => <div key={i} style={{ fontSize: 7, color: "#c8d4e8" }}>{h}</div>)}
               </div>
               {sigs.map((s, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "58px 70px 42px 50px 38px 38px 38px 38px 38px 38px 48px 1fr", padding: "4px 6px", borderBottom: "1px solid #08081a", background: s.correct ? "#001508" : i%2===0 ? "#06060f" : "#04040e", alignItems: "center" }}>
                   <span style={{ fontSize: 7, color: "#5a6a80" }}>{s.date}</span>
                   <span style={{ fontSize: 8, fontWeight: "bold", color: biasC[s.bias]||"#888" }}>{s.bias}</span>
-                  <span style={{ fontSize: 8, color: (s.confidence||0)>=70?"#a855f7":"#8a9ab8" }}>{s.confidence}%</span>
+                  <span style={{ fontSize: 8, color: (s.confidence||0)>=70?"#a855f7":"#c8d4e8" }}>{s.confidence}%</span>
                   <span style={{ fontSize: 8, color: s.direction==="LONG"?"#00ff9d":"#ff3355" }}>{s.direction}</span>
                   <span style={{ fontSize: 8, color: (s.confluenceScore||0)>=60?"#00ff9d":(s.confluenceScore||0)>=35?"#ffcc00":"#ff3355", fontWeight:"bold" }}>{s.confluenceScore||0}</span>
-                  <span style={{ fontSize: 7, color: "#8a9ab8" }}>{s.rsiState?.slice(0,4)}</span>
+                  <span style={{ fontSize: 7, color: "#c8d4e8" }}>{s.rsiState?.slice(0,4)}</span>
                   <span style={{ fontSize: 7, color: s.macdState==="bull"?"#00ff9d":"#ff3355" }}>{s.macdState}</span>
-                  <span style={{ fontSize: 8, color: s.strongBullCandle?"#00ff9d":s.strongBearCandle?"#ff3355":"#2a3a55" }}>{s.strongBullCandle?"★":s.strongBearCandle?"★":(s.candleCount||0)>0?"✓":"—"}</span>
-                  <span style={{ fontSize: 8, color: (s.bullSMC||0)+(s.bearSMC||0)>0?"#a855f7":"#2a3a55" }}>{(s.bullSMC||0)+(s.bearSMC||0)>0?"✓":"—"}</span>
-                  <span style={{ fontSize: 8, color: s.hasDivergence?"#ff8c00":"#2a3a55" }}>{s.hasDivergence?"✓":"—"}</span>
+                  <span style={{ fontSize: 8, color: s.strongBullCandle?"#00ff9d":s.strongBearCandle?"#ff3355":"#c8d4e8" }}>{s.strongBullCandle?"★":s.strongBearCandle?"★":(s.candleCount||0)>0?"✓":"—"}</span>
+                  <span style={{ fontSize: 8, color: (s.bullSMC||0)+(s.bearSMC||0)>0?"#a855f7":"#c8d4e8" }}>{(s.bullSMC||0)+(s.bearSMC||0)>0?"✓":"—"}</span>
+                  <span style={{ fontSize: 8, color: s.hasDivergence?"#ff8c00":"#c8d4e8" }}>{s.hasDivergence?"✓":"—"}</span>
                   <span style={{ fontSize: 8, color: s.pct>=0?"#00ff9d":"#ff3355" }}>{s.pct>=0?"+":""}{s.pct?.toFixed(1)}%</span>
-                  <span style={{ fontSize: 10 }}>{s.direction==="WAIT"?"—":s.correct?"✓":"✗"}{s.backtest&&<span style={{fontSize:7,color:"#2a3a55"}}> BT</span>}</span>
+                  <span style={{ fontSize: 10 }}>{s.direction==="WAIT"?"—":s.correct?"✓":"✗"}{s.backtest&&<span style={{fontSize:7,color:"#c8d4e8"}}> BT</span>}</span>
                 </div>
               ))}
             </div>
@@ -1972,7 +2028,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           {/* ── CONFLUENCE ANALYSIS ── */}
           {tab === "confluence" && (
             <div>
-              <div style={{ fontSize: 9, color: "#2a3a55", marginBottom: 8 }}>Win rate by confluence score level (0-100 based on all confirmations combined)</div>
+              <div style={{ fontSize: 9, color: "#c8d4e8", marginBottom: 8 }}>Win rate by confluence score level (0-100 based on all confirmations combined)</div>
               {["elite","high","medium","low"].map(lvl => {
                 const d = entry.confluenceBuckets?.[lvl];
                 if (!d || d.total < 1) return null;
@@ -1988,7 +2044,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                       <div style={{ display: "flex", gap: 12 }}>
                         <span style={{ fontSize: 10, fontWeight: "bold", color: col }}>{wr.toFixed(0)}% WR</span>
                         <span style={{ fontSize: 9, color: avg>=0?"#00ff9d":"#ff3355" }}>avg {avg>=0?"+":""}{avg}%</span>
-                        <span style={{ fontSize: 9, color: "#2a3a55" }}>{d.total} trades</span>
+                        <span style={{ fontSize: 9, color: "#c8d4e8" }}>{d.total} trades</span>
                       </div>
                     </div>
                     <div style={{ width: "100%", height: 8, background: "#0f1525", borderRadius: 4 }}>
@@ -1997,7 +2053,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                   </div>
                 );
               })}
-              <div style={{ marginTop: 10, fontSize: 9, color: "#2a3a55", lineHeight: 1.8 }}>
+              <div style={{ marginTop: 10, fontSize: 9, color: "#c8d4e8", lineHeight: 1.8 }}>
                 Confluence score (0-100) rewards: strong candle patterns (+15), order blocks (+10), BOS (+8), divergence (+15), golden fib (+15), major S/R (+10), volume spike (+10), indicator alignment (+5 each).
               </div>
             </div>
@@ -2007,7 +2063,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           {tab === "strategies" && (
             <div style={{ maxHeight: 280, overflowY: "auto" }}>
               {strats.length === 0 ? (
-                <div style={{ color: "#1a2a40", fontSize: 9, lineHeight: 1.9 }}>No strategies discovered yet. Need ≥8 signals. The engine tests 35+ confluence combinations automatically.</div>
+                <div style={{ color: "#4a5a7a", fontSize: 9, lineHeight: 1.9 }}>No strategies discovered yet. Need ≥8 signals. The engine tests 35+ confluence combinations automatically.</div>
               ) : (
                 <>
                   <div style={{ fontSize: 8, color: "#00ff9d80", letterSpacing: 2, marginBottom: 6 }}>▲ WINNING EDGES</div>
@@ -2018,7 +2074,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                         <div style={{ display: "flex", gap: 10 }}>
                           <span style={{ fontSize: 10, color: "#00ff9d", fontWeight: "bold" }}>{s.wr}% WR</span>
                           <span style={{ fontSize: 9, color: "#00ff9d80" }}>+{s.avgPnl}% avg</span>
-                          <span style={{ fontSize: 8, color: "#2a3a55" }}>({s.n} trades)</span>
+                          <span style={{ fontSize: 8, color: "#c8d4e8" }}>({s.n} trades)</span>
                         </div>
                       </div>
                     </div>
@@ -2032,7 +2088,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                             <span style={{ fontSize: 9, color: "#ba5a65" }}>{s.label}</span>
                             <div style={{ display: "flex", gap: 10 }}>
                               <span style={{ fontSize: 10, color: "#ff3355", fontWeight: "bold" }}>{s.wr}% WR</span>
-                              <span style={{ fontSize: 8, color: "#2a3a55" }}>({s.n} trades)</span>
+                              <span style={{ fontSize: 8, color: "#c8d4e8" }}>({s.n} trades)</span>
                             </div>
                           </div>
                         </div>
@@ -2048,7 +2104,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           {tab === "failures" && (
             <div>
               {failures.length === 0
-                ? <div style={{ color: "#1a2a40", fontSize: 9, padding: 10, lineHeight: 1.8 }}>No failure modes detected yet. Need ≥3 signals in a losing pattern. Keep building the database.</div>
+                ? <div style={{ color: "#4a5a7a", fontSize: 9, padding: 10, lineHeight: 1.8 }}>No failure modes detected yet. Need ≥3 signals in a losing pattern. Keep building the database.</div>
                 : failures.map((f, i) => (
                   <div key={i} style={{ background: f.severity==="high"?"#1a040818":"#1a0a0415", border:`1px solid ${f.severity==="high"?"#ff335540":"#ff8c0030"}`, borderRadius: 5, padding: "9px 12px", marginBottom: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
@@ -2067,7 +2123,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
             <div>
               {currentFV ? (
                 <>
-                  <div style={{ fontSize: 9, color: "#2a3a55", marginBottom: 6 }}>Most similar past situations to current setup (weighted by confluence, patterns, SMC, divergence, fib, S/R):</div>
+                  <div style={{ fontSize: 9, color: "#c8d4e8", marginBottom: 6 }}>Most similar past situations to current setup (weighted by confluence, patterns, SMC, divergence, fib, S/R):</div>
                   {findSimilarSignals(mem, selected.split("-")[0], selected.split("-").slice(1).join("-") || "1d", currentFV, 8).map((s, i) => (
                     <div key={i} style={{ background: s.correct?"#00150808":"#15000808", border:`1px solid ${s.correct?"#00ff9d20":"#ff335520"}`, borderRadius: 5, padding: "7px 10px", marginBottom: 4 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
@@ -2089,11 +2145,11 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                     </div>
                   ))}
                   {findSimilarSignals(mem, selected.split("-")[0], selected.split("-").slice(1).join("-") || "1d", currentFV, 8).length === 0 && (
-                    <div style={{ color: "#1a2a40", fontSize: 9 }}>No similar situations found yet. Build the database with backtest or closed trades.</div>
+                    <div style={{ color: "#4a5a7a", fontSize: 9 }}>No similar situations found yet. Build the database with backtest or closed trades.</div>
                   )}
                 </>
               ) : (
-                <div style={{ color: "#1a2a40", fontSize: 9, padding: 12 }}>Load and fetch a ticker to see similar past setups matched to current conditions.</div>
+                <div style={{ color: "#4a5a7a", fontSize: 9, padding: 12 }}>Load and fetch a ticker to see similar past setups matched to current conditions.</div>
               )}
             </div>
           )}
@@ -2101,7 +2157,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           {/* ── CALIBRATION ── */}
           {tab === "calibration" && (
             <div>
-              <div style={{ fontSize: 9, color: "#2a3a55", marginBottom: 10 }}>Does stated confidence match actual win rate? (All assets, global)</div>
+              <div style={{ fontSize: 9, color: "#c8d4e8", marginBottom: 10 }}>Does stated confidence match actual win rate? (All assets, global)</div>
               {["0-49","50-59","60-69","70-79","80-89","90-100"].map(bkt => {
                 const d = calib[bkt]; if (!d || d.total < 2) return null;
                 const actual = d.wins / d.total * 100;
@@ -2111,20 +2167,20 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                 return (
                   <div key={bkt} style={{ marginBottom: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                      <span style={{ fontSize: 9, color: "#8a9ab8" }}>Stated: {bkt}%</span>
+                      <span style={{ fontSize: 9, color: "#c8d4e8" }}>Stated: {bkt}%</span>
                       <span style={{ fontSize: 10, fontWeight: "bold", color: col }}>Actual: {actual.toFixed(0)}%</span>
                       <span style={{ fontSize: 8, color: diff>=0?"#00ff9d":"#ff3355" }}>{diff>=0?"+":""}{diff.toFixed(0)}pp</span>
-                      <span style={{ fontSize: 8, color: "#2a3a55" }}>{d.total} signals</span>
+                      <span style={{ fontSize: 8, color: "#c8d4e8" }}>{d.total} signals</span>
                     </div>
                     <div style={{ height: 8, background: "#0f1525", borderRadius: 3, position: "relative" }}>
                       <div style={{ position: "absolute", left: 0, top: 0, width: `${Math.min(100,actual)}%`, height: "100%", background: col, borderRadius: 3 }} />
                       <div style={{ position: "absolute", left: `${Math.min(100,stated)}%`, top: -2, width: 2, height: 12, background: "#ffffff60" }} />
                     </div>
-                    <div style={{ fontSize: 7, color: "#2a3a55", marginTop: 1 }}>▐ = stated target</div>
+                    <div style={{ fontSize: 7, color: "#c8d4e8", marginTop: 1 }}>▐ = stated target</div>
                   </div>
                 );
               })}
-              {Object.keys(calib).length === 0 && <div style={{ color: "#1a2a40", fontSize: 9 }}>No calibration data yet. Close trades to build it.</div>}
+              {Object.keys(calib).length === 0 && <div style={{ color: "#4a5a7a", fontSize: 9 }}>No calibration data yet. Close trades to build it.</div>}
             </div>
           )}
 
@@ -2138,7 +2194,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                       SELF-EVOLVED RULES v{evolved.version || 1} — auto-injected into every AI analysis
                     </div>
                     <div style={{ fontSize: 9, color: "#8aba8a", lineHeight: 1.7 }}>{evolved.rules}</div>
-                    <div style={{ marginTop: 6, fontSize: 8, color: "#2a3a55" }}>
+                    <div style={{ marginTop: 6, fontSize: 8, color: "#c8d4e8" }}>
                       Evolved on {evolved.evolvedAt} · {evolved.signalCount} signals · Asset: {evolved.key}
                     </div>
                   </div>
@@ -2148,7 +2204,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
                   </button>
                 </div>
               ) : (
-                <div style={{ color: "#1a2a40", fontSize: 9, lineHeight: 1.9 }}>
+                <div style={{ color: "#4a5a7a", fontSize: 9, lineHeight: 1.9 }}>
                   {["No evolved rules yet.",`Need ≥5 closed signals (have ${sigs.length}).`,"Click ⚡ EVOLVE above.","The AI analyzes ALL dimensions:","candles, SMC, fib, S/R, divergence,","volume, confluence score — then","writes specific IF-THEN rules","that improve future win rate.","Rules persist and auto-inject."].map(l=><div key={l}>{l}</div>)}
                 </div>
               )}
@@ -2156,7 +2212,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           )}
         </div>
       ) : (
-        <div style={{ color: "#1a2a40", fontSize: 9, fontFamily: "monospace", padding: "20px 0", lineHeight: 1.9 }}>
+        <div style={{ color: "#4a5a7a", fontSize: 9, fontFamily: "monospace", padding: "20px 0", lineHeight: 1.9 }}>
           {["Select an asset to view its","intelligence database:","","→ Full confluence scoring","→ 35+ strategy pattern tests","→ 7-dimensional condition buckets","→ Weighted similarity search","→ Self-evolved IF-THEN rules","→ Confidence calibration curve","","Run Backtest to populate quickly."].map(l=><div key={l}>{l}</div>)}
         </div>
       )}
@@ -2220,11 +2276,11 @@ function WatchlistPanel({ onLoadTicker, groqKey, currentTicker }) {
   return (
     <div style={{ padding: 12 }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <input value={newTick} onChange={e => setNewTick(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="ADD TICKER" style={{ background: "#0a0a1a", border: "1px solid #1a2a40", color: "#00ff9d", padding: "5px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 11, width: 120, letterSpacing: 2 }} />
+        <input value={newTick} onChange={e => setNewTick(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="ADD TICKER" style={{ background: "#0a0a1a", border: "1px solid #4a5a7a", color: "#00ff9d", padding: "5px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 11, width: 120, letterSpacing: 2 }} />
         <button onClick={addTicker} style={{ background: "#00ff9d18", border: "1px solid #00ff9d40", color: "#00ff9d", padding: "5px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 10 }}>+ ADD</button>
         <button onClick={refreshAll} style={{ background: "#00d4ff12", border: "1px solid #00d4ff30", color: "#00d4ff", padding: "5px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 10 }}>⟳ REFRESH ALL</button>
         {groqKey && <button onClick={aiScan} disabled={scanning} style={{ background: "#a855f718", border: "1px solid #a855f740", color: "#a855f7", padding: "5px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 10 }}>{scanning ? "⟳ SCANNING..." : "🔍 AI SCAN ALL"}</button>}
-        <span style={{ fontSize: 8, color: "#1a2a40", marginLeft: "auto" }}>CLICK CARD TO LOAD · AUTO-REFRESH 30s</span>
+        <span style={{ fontSize: 8, color: "#4a5a7a", marginLeft: "auto" }}>CLICK CARD TO LOAD · AUTO-REFRESH 30s</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
         {items.map((it, i) => {
@@ -2235,15 +2291,15 @@ function WatchlistPanel({ onLoadTicker, groqKey, currentTicker }) {
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <div>
                   <div style={{ fontWeight: "bold", color: "#c8d4e8", fontSize: 12, letterSpacing: 1 }}>{it.sym}</div>
-                  <div style={{ fontSize: 8, color: "#2a3a55", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+                  <div style={{ fontSize: 8, color: "#c8d4e8", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
                 </div>
-                <button onClick={e => { e.stopPropagation(); persist(items.filter(x => x.sym !== it.sym)); }} style={{ background: "none", border: "none", color: "#1a2a40", cursor: "pointer", fontSize: 11 }}>✕</button>
+                <button onClick={e => { e.stopPropagation(); persist(items.filter(x => x.sym !== it.sym)); }} style={{ background: "none", border: "none", color: "#4a5a7a", cursor: "pointer", fontSize: 11 }}>✕</button>
               </div>
-              {it.loading ? <div style={{ fontSize: 10, color: "#2a3a55", marginTop: 6 }}>⟳ loading...</div>
+              {it.loading ? <div style={{ fontSize: 10, color: "#c8d4e8", marginTop: 6 }}>⟳ loading...</div>
                 : it.price ? <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
                   <span style={{ fontSize: 14, fontWeight: "bold", color: it.pct >= 0 ? "#00ff9d" : "#ff3355" }}>{it.price < 10 ? it.price.toFixed(4) : it.price.toFixed(2)}</span>
                   <span style={{ fontSize: 11, color: it.pct >= 0 ? "#00ff9d" : "#ff3355" }}>{it.pct >= 0 ? "▲" : "▼"} {Math.abs(it.pct).toFixed(2)}%</span>
-                </div> : <div style={{ fontSize: 10, color: "#2a3a55", marginTop: 6 }}>—</div>}
+                </div> : <div style={{ fontSize: 10, color: "#c8d4e8", marginTop: 6 }}>—</div>}
               {sc && <div style={{ marginTop: 6, display: "flex", gap: 6, borderTop: "1px solid #0a0a1a", paddingTop: 5 }}>
                 <span style={{ fontSize: 9, fontWeight: "bold", color: sigC[sc.signal] || "#888", border: `1px solid ${sigC[sc.signal] || "#888"}40`, padding: "1px 6px", borderRadius: 3 }}>{sc.signal}</span>
                 <span style={{ fontSize: 8, color: "#5a6a80", flex: 1, lineHeight: 1.3 }}>{sc.reason}</span>
@@ -2317,13 +2373,13 @@ function PortfolioPanel({ currentTicker, currentPrice }) {
     <div style={{ padding: 12 }}>
       {/* Form */}
       <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, padding: 10, marginBottom: 10 }}>
-        <div style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 2, marginBottom: 8 }}>OPEN POSITION</div>
+        <div style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 2, marginBottom: 8 }}>OPEN POSITION</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
           {[["sym", "TICKER", 80, true], ["qty", "QTY", 70, false], ["entry", "ENTRY $", 100, false], ["note", "NOTE", 140, false]].map(([k, ph, w, up]) => (
             <input key={k} value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: up ? e.target.value.toUpperCase() : e.target.value }))} placeholder={ph}
-              style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: w }} />
+              style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: w }} />
           ))}
-          <select value={form.dir} onChange={e => setForm(f => ({ ...f, dir: e.target.value }))} style={{ background: "#04040c", border: "1px solid #1a2a40", color: form.dir === "LONG" ? "#00ff9d" : "#ff3355", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
+          <select value={form.dir} onChange={e => setForm(f => ({ ...f, dir: e.target.value }))} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: form.dir === "LONG" ? "#00ff9d" : "#ff3355", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
             <option value="LONG">▲ LONG</option><option value="SHORT">▼ SHORT</option>
           </select>
           <button onClick={addPos} style={{ background: "#00ff9d18", border: "1px solid #00ff9d40", color: "#00ff9d", padding: "5px 14px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 10 }}>+ OPEN</button>
@@ -2334,7 +2390,7 @@ function PortfolioPanel({ currentTicker, currentPrice }) {
       <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
         {[["OPEN", positions.length, "#00d4ff"], ["OPEN P&L", `${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}`, totalPnl >= 0 ? "#00ff9d" : "#ff3355"], ["REALIZED", `${totalHistPnl >= 0 ? "+" : ""}$${totalHistPnl.toFixed(2)}`, totalHistPnl >= 0 ? "#00ff9d" : "#ff3355"]].map(([l, v, c]) => (
           <div key={l} style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, padding: "6px 14px" }}>
-            <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>{l}</div>
+            <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>{l}</div>
             <div style={{ fontSize: 15, fontWeight: "bold", color: c }}>{v}</div>
           </div>
         ))}
@@ -2345,19 +2401,19 @@ function PortfolioPanel({ currentTicker, currentPrice }) {
       {/* Positions Table */}
       {!showHistory ? (
         positions.length === 0
-          ? <div style={{ color: "#1a2a40", fontFamily: "monospace", fontSize: 10, padding: "16px", textAlign: "center" }}>No open positions.</div>
+          ? <div style={{ color: "#4a5a7a", fontFamily: "monospace", fontSize: 10, padding: "16px", textAlign: "center" }}>No open positions.</div>
           : <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, overflow: "hidden" }}>
             <div style={{ display: "grid", gridTemplateColumns: "60px 55px 70px 80px 90px 80px 1fr 36px", padding: "5px 10px", borderBottom: "1px solid #0f1525" }}>
-              {["SYM", "DIR", "QTY", "ENTRY", "LIVE", "P&L", "NOTE", ""].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>{h}</div>)}
+              {["SYM", "DIR", "QTY", "ENTRY", "LIVE", "P&L", "NOTE", ""].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>{h}</div>)}
             </div>
             {positions.map(pos => { const p = getP(pos); return (
               <div key={pos.id} style={{ display: "grid", gridTemplateColumns: "60px 55px 70px 80px 90px 80px 1fr 36px", padding: "7px 10px", borderBottom: "1px solid #08081a", alignItems: "center" }}>
                 <div style={{ fontWeight: "bold", color: "#c8d4e8", fontSize: 11 }}>{pos.sym}</div>
                 <div style={{ color: pos.dir === "LONG" ? "#00ff9d" : "#ff3355", fontSize: 10, fontWeight: "bold" }}>{pos.dir}</div>
-                <div style={{ color: "#8a9ab8", fontSize: 10 }}>{pos.qty}</div>
-                <div style={{ color: "#8a9ab8", fontSize: 10 }}>{pos.entry < 10 ? pos.entry.toFixed(4) : pos.entry.toFixed(2)}</div>
+                <div style={{ color: "#c8d4e8", fontSize: 10 }}>{pos.qty}</div>
+                <div style={{ color: "#c8d4e8", fontSize: 10 }}>{pos.entry < 10 ? pos.entry.toFixed(4) : pos.entry.toFixed(2)}</div>
                 <div style={{ color: "#c8d4e8", fontSize: 10 }}>{p?.lp ? (p.lp < 10 ? p.lp.toFixed(4) : p.lp.toFixed(2)) : "—"}</div>
-                <div style={{ fontSize: 10 }}>{p ? <span style={{ color: p.raw >= 0 ? "#00ff9d" : "#ff3355", fontWeight: "bold" }}>{p.raw >= 0 ? "+" : ""}${p.raw.toFixed(2)}<br /><span style={{ fontSize: 8, fontWeight: "normal" }}>{p.pct >= 0 ? "+" : ""}{p.pct.toFixed(1)}%</span></span> : <span style={{ color: "#2a3a55" }}>—</span>}</div>
+                <div style={{ fontSize: 10 }}>{p ? <span style={{ color: p.raw >= 0 ? "#00ff9d" : "#ff3355", fontWeight: "bold" }}>{p.raw >= 0 ? "+" : ""}${p.raw.toFixed(2)}<br /><span style={{ fontSize: 8, fontWeight: "normal" }}>{p.pct >= 0 ? "+" : ""}{p.pct.toFixed(1)}%</span></span> : <span style={{ color: "#c8d4e8" }}>—</span>}</div>
                 <div style={{ fontSize: 9, color: "#3a4a60", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pos.note || pos.openedAt}</div>
                 <button onClick={() => closePos(pos.id)} style={{ background: "#ff335518", border: "1px solid #ff335530", color: "#ff3355", padding: "3px 6px", borderRadius: 3, cursor: "pointer", fontSize: 9 }}>✕</button>
               </div>
@@ -2365,19 +2421,19 @@ function PortfolioPanel({ currentTicker, currentPrice }) {
           </div>
       ) : (
         history.length === 0
-          ? <div style={{ color: "#1a2a40", fontFamily: "monospace", fontSize: 10, padding: "16px", textAlign: "center" }}>No closed trades yet.</div>
+          ? <div style={{ color: "#4a5a7a", fontFamily: "monospace", fontSize: 10, padding: "16px", textAlign: "center" }}>No closed trades yet.</div>
           : <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, overflow: "hidden" }}>
             <div style={{ display: "grid", gridTemplateColumns: "60px 55px 80px 80px 80px 1fr", padding: "5px 10px", borderBottom: "1px solid #0f1525" }}>
-              {["SYM", "DIR", "ENTRY", "P&L", "$P&L", "CLOSED"].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>{h}</div>)}
+              {["SYM", "DIR", "ENTRY", "P&L", "$P&L", "CLOSED"].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>{h}</div>)}
             </div>
             {history.map((h, i) => (
               <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 55px 80px 80px 80px 1fr", padding: "7px 10px", borderBottom: "1px solid #08081a", alignItems: "center" }}>
-                <div style={{ fontWeight: "bold", color: "#8a9ab8", fontSize: 11 }}>{h.sym}</div>
+                <div style={{ fontWeight: "bold", color: "#c8d4e8", fontSize: 11 }}>{h.sym}</div>
                 <div style={{ color: h.dir === "LONG" ? "#00ff9d60" : "#ff335560", fontSize: 10 }}>{h.dir}</div>
                 <div style={{ color: "#5a6a80", fontSize: 10 }}>{h.entry < 10 ? h.entry.toFixed(4) : h.entry.toFixed(2)}</div>
                 <div style={{ color: h.finalPnl >= 0 ? "#00ff9d" : "#ff3355", fontSize: 10, fontWeight: "bold" }}>{h.finalPnl >= 0 ? "+" : ""}{h.finalPct?.toFixed(1)}%</div>
                 <div style={{ color: h.finalPnl >= 0 ? "#00ff9d" : "#ff3355", fontSize: 10 }}>{h.finalPnl >= 0 ? "+" : ""}${h.finalPnl?.toFixed(2)}</div>
-                <div style={{ color: "#2a3a55", fontSize: 9 }}>{h.closedAt}</div>
+                <div style={{ color: "#c8d4e8", fontSize: 9 }}>{h.closedAt}</div>
               </div>
             ))}
           </div>
@@ -2431,12 +2487,12 @@ function AlertsPanel({ currentTicker, currentPrice }) {
     <div style={{ padding: 12 }}>
       {/* Form */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <input value={form.sym} onChange={e => setForm(f => ({ ...f, sym: e.target.value.toUpperCase() }))} placeholder="TICKER" style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: 80 }} />
-        <select value={form.cond} onChange={e => setForm(f => ({ ...f, cond: e.target.value }))} style={{ background: "#04040c", border: "1px solid #1a2a40", color: form.cond === "above" ? "#00ff9d" : "#ff3355", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
+        <input value={form.sym} onChange={e => setForm(f => ({ ...f, sym: e.target.value.toUpperCase() }))} placeholder="TICKER" style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: 80 }} />
+        <select value={form.cond} onChange={e => setForm(f => ({ ...f, cond: e.target.value }))} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: form.cond === "above" ? "#00ff9d" : "#ff3355", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
           <option value="above">↑ ABOVE</option><option value="below">↓ BELOW</option>
         </select>
-        <input value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="PRICE" style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#ffcc00", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: 100 }} />
-        <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Note (optional)" style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: 160 }} />
+        <input value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="PRICE" style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#ffcc00", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: 100 }} />
+        <input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Note (optional)" style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: 160 }} />
         <button onClick={addAlert} style={{ background: "#ffcc0018", border: "1px solid #ffcc0040", color: "#ffcc00", padding: "5px 14px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 10 }}>🔔 SET ALERT</button>
         <button onClick={requestNotif} style={{ background: notifAllowed ? "#00ff9d12" : "#3a3a2012", border: `1px solid ${notifAllowed ? "#00ff9d40" : "#3a3a2040"}`, color: notifAllowed ? "#00ff9d" : "#5a5a40", padding: "5px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>
           {notifAllowed ? "✓ NOTIFICATIONS ON" : "🔔 ENABLE NOTIFICATIONS"}
@@ -2445,28 +2501,28 @@ function AlertsPanel({ currentTicker, currentPrice }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         {/* Active */}
         <div>
-          <div style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 2, marginBottom: 6 }}>ACTIVE ALERTS ({alerts.length})</div>
+          <div style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 2, marginBottom: 6 }}>ACTIVE ALERTS ({alerts.length})</div>
           {alerts.length === 0
-            ? <div style={{ color: "#1a2a40", fontSize: 10, fontFamily: "monospace" }}>No active alerts set.</div>
+            ? <div style={{ color: "#4a5a7a", fontSize: 10, fontFamily: "monospace" }}>No active alerts set.</div>
             : alerts.map(a => (
               <div key={a.id} style={{ display: "flex", gap: 8, alignItems: "center", background: "#06060f", border: "1px solid #0f1525", borderRadius: 5, padding: "7px 10px", marginBottom: 5 }}>
                 <span style={{ fontWeight: "bold", color: "#c8d4e8", fontSize: 11 }}>{a.sym}</span>
                 <span style={{ color: a.cond === "above" ? "#00ff9d" : "#ff3355", fontSize: 10 }}>{a.cond === "above" ? "↑" : "↓"}</span>
                 <span style={{ color: "#ffcc00", fontWeight: "bold", fontSize: 11 }}>{a.price < 10 ? a.price.toFixed(4) : a.price.toFixed(2)}</span>
                 {a.note && <span style={{ color: "#3a4a60", fontSize: 9, flex: 1 }}>{a.note}</span>}
-                <span style={{ color: "#1a2a40", fontSize: 8, marginLeft: "auto" }}>{a.createdAt}</span>
-                <button onClick={() => persist(alerts.filter(x => x.id !== a.id))} style={{ background: "none", border: "none", color: "#2a3a55", cursor: "pointer", fontSize: 11 }}>✕</button>
+                <span style={{ color: "#4a5a7a", fontSize: 8, marginLeft: "auto" }}>{a.createdAt}</span>
+                <button onClick={() => persist(alerts.filter(x => x.id !== a.id))} style={{ background: "none", border: "none", color: "#c8d4e8", cursor: "pointer", fontSize: 11 }}>✕</button>
               </div>
             ))}
         </div>
         {/* Triggered */}
         <div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-            <span style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 2 }}>FIRED ({triggered.length})</span>
-            {triggered.length > 0 && <button onClick={() => setTriggered([])} style={{ background: "none", border: "1px solid #1a2a40", color: "#2a3a55", padding: "1px 6px", borderRadius: 3, cursor: "pointer", fontSize: 8, fontFamily: "monospace" }}>CLEAR</button>}
+            <span style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 2 }}>FIRED ({triggered.length})</span>
+            {triggered.length > 0 && <button onClick={() => setTriggered([])} style={{ background: "none", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "1px 6px", borderRadius: 3, cursor: "pointer", fontSize: 8, fontFamily: "monospace" }}>CLEAR</button>}
           </div>
           {triggered.length === 0
-            ? <div style={{ color: "#1a2a40", fontSize: 10, fontFamily: "monospace" }}>No fired alerts yet.</div>
+            ? <div style={{ color: "#4a5a7a", fontSize: 10, fontFamily: "monospace" }}>No fired alerts yet.</div>
             : triggered.map((a, i) => (
               <div key={i} style={{ background: "#0a040418", border: "1px solid #ff335530", borderRadius: 5, padding: "7px 10px", marginBottom: 5, display: "flex", gap: 8, alignItems: "center" }}>
                 <span style={{ fontSize: 14 }}>🔔</span>
@@ -2544,13 +2600,13 @@ ${headlines}`;
       {/* Feed */}
       <div>
         <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 2 }}>NEWS — {ticker}</span>
+          <span style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 2 }}>NEWS — {ticker}</span>
           <button onClick={fetchNews} disabled={loadingNews} style={{ background: "#00d4ff12", border: "1px solid #00d4ff30", color: "#00d4ff", padding: "3px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>{loadingNews ? "⟳" : "⟳ REFRESH"}</button>
           {groqKey && <button onClick={analyzeGroq} disabled={loadingAI || !news.length} style={{ background: "#a855f718", border: "1px solid #a855f740", color: "#a855f7", padding: "3px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>{loadingAI ? "⟳ ANALYZING..." : "🧠 ANALYZE SENTIMENT"}</button>}
         </div>
         {err && <div style={{ color: "#ff3355", fontSize: 9, marginBottom: 6 }}>⚠ {err}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 310, overflowY: "auto" }}>
-          {news.length === 0 && !loadingNews && <div style={{ color: "#1a2a40", fontSize: 10, fontFamily: "monospace" }}>No news loaded.</div>}
+          {news.length === 0 && !loadingNews && <div style={{ color: "#4a5a7a", fontSize: 10, fontFamily: "monospace" }}>No news loaded.</div>}
           {news.map((n, i) => {
             const it = sentiment?.items?.[i];
             return (
@@ -2561,8 +2617,8 @@ ${headlines}`;
                     <div style={{ fontSize: 10, color: "#c8d4e8", lineHeight: 1.5, fontWeight: it?.impact === "high" ? "bold" : "normal" }}>{n.title}</div>
                     {n.desc && <div style={{ fontSize: 9, color: "#3a4a60", marginTop: 2, lineHeight: 1.4 }}>{n.desc}</div>}
                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
-                      <span style={{ fontSize: 8, color: "#1a2a40" }}>{n.date?.slice(0, 22)}</span>
-                      {it && <span style={{ fontSize: 8, color: it.impact === "high" ? "#ffcc00" : "#2a3a55", letterSpacing: 1 }}>{it.impact?.toUpperCase()}</span>}
+                      <span style={{ fontSize: 8, color: "#4a5a7a" }}>{n.date?.slice(0, 22)}</span>
+                      {it && <span style={{ fontSize: 8, color: it.impact === "high" ? "#ffcc00" : "#c8d4e8", letterSpacing: 1 }}>{it.impact?.toUpperCase()}</span>}
                     </div>
                   </div>
                 </div>
@@ -2573,13 +2629,13 @@ ${headlines}`;
       </div>
       {/* Sentiment Card */}
       <div>
-        <div style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 2, marginBottom: 8 }}>AI SENTIMENT</div>
+        <div style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 2, marginBottom: 8 }}>AI SENTIMENT</div>
         {!sentiment && !loadingAI && (
-          <div style={{ color: "#1a2a40", fontSize: 10, fontFamily: "monospace", lineHeight: 1.9 }}>
+          <div style={{ color: "#4a5a7a", fontSize: 10, fontFamily: "monospace", lineHeight: 1.9 }}>
             {["→ Parses all headlines", "→ Rates each by impact", "→ Finds positive catalysts", "→ Flags risk themes", "→ Overall sentiment score"].map(l => <div key={l}>{l}</div>)}
           </div>
         )}
-        {loadingAI && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 24, color: "#a855f7" }}><div style={{ fontSize: 22, animation: "spin 1s linear infinite" }}>◈</div><div style={{ fontSize: 9, letterSpacing: 2, color: "#2a3a55" }}>READING THE NEWS...</div></div>}
+        {loadingAI && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 24, color: "#a855f7" }}><div style={{ fontSize: 22, animation: "spin 1s linear infinite" }}>◈</div><div style={{ fontSize: 9, letterSpacing: 2, color: "#c8d4e8" }}>READING THE NEWS...</div></div>}
         {sentiment && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ background: "#06060f", border: `1px solid ${sc[sentiment.overall] || "#888"}30`, borderRadius: 6, padding: 10 }}>
@@ -2590,7 +2646,7 @@ ${headlines}`;
               <div style={{ width: "100%", height: 4, background: "#0f1525", borderRadius: 2, marginBottom: 8 }}>
                 <div style={{ width: `${sentiment.score}%`, height: "100%", background: `linear-gradient(90deg,${sc[sentiment.overall]},${sc[sentiment.overall]}88)`, borderRadius: 2 }} />
               </div>
-              <div style={{ fontSize: 9, color: "#8a9ab8", lineHeight: 1.6 }}>{sentiment.summary}</div>
+              <div style={{ fontSize: 9, color: "#c8d4e8", lineHeight: 1.6 }}>{sentiment.summary}</div>
             </div>
             {sentiment.catalysts?.length > 0 && (
               <div style={{ background: "#06060f", border: "1px solid #00ff9d18", borderRadius: 6, padding: 8 }}>
@@ -2674,7 +2730,7 @@ function MultiTimeframePanel({ ticker }) {
   return (
     <div style={{ padding: 12 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 2 }}>MTF CONFLUENCE — {ticker}</span>
+        <span style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 2 }}>MTF CONFLUENCE — {ticker}</span>
         <button onClick={() => analyze(ticker)} disabled={loading} style={{ background: "#00d4ff12", border: "1px solid #00d4ff30", color: "#00d4ff", padding: "3px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>{loading ? "⟳ SCANNING..." : "⟳ REFRESH"}</button>
         {rows.length > 0 && (() => {
           const valid = rows.filter(r => !r.err);
@@ -2685,17 +2741,17 @@ function MultiTimeframePanel({ ticker }) {
           return <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: "bold", color: oc, border: `1px solid ${oc}40`, padding: "3px 14px", borderRadius: 4, letterSpacing: 2 }}>{overall}</span>;
         })()}
       </div>
-      {loading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 24, color: "#00d4ff" }}><div style={{ fontSize: 22, animation: "spin 1s linear infinite" }}>◈</div><div style={{ fontSize: 9, letterSpacing: 2, color: "#2a3a55" }}>ANALYZING ALL TIMEFRAMES...</div></div>}
+      {loading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 24, color: "#00d4ff" }}><div style={{ fontSize: 22, animation: "spin 1s linear infinite" }}>◈</div><div style={{ fontSize: 9, letterSpacing: 2, color: "#c8d4e8" }}>ANALYZING ALL TIMEFRAMES...</div></div>}
       {!loading && rows.length > 0 && (
         <>
           {/* Header */}
           <div style={{ display: "grid", gridTemplateColumns: "52px 60px 56px 60px 80px 80px 80px 1fr", padding: "5px 10px", borderBottom: "1px solid #0f1525", background: "#04040c", borderRadius: "4px 4px 0 0" }}>
-            {["TF", "BIAS", "SCORE", "RSI", "MACD", "SMA20", "SMA50", "TREND / PATTERNS"].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>{h}</div>)}
+            {["TF", "BIAS", "SCORE", "RSI", "MACD", "SMA20", "SMA50", "TREND / PATTERNS"].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>{h}</div>)}
           </div>
           {rows.map((r, i) => r.err ? (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "52px 60px 56px 60px 80px 80px 80px 1fr", padding: "9px 10px", borderBottom: "1px solid #08081a", background: "#06060f" }}>
               <span style={{ fontWeight: "bold", color: "#3a4a60", fontSize: 11 }}>{r.tf}</span>
-              <span style={{ color: "#2a3a55", fontSize: 9, gridColumn: "2 / -1" }}>{r.err}</span>
+              <span style={{ color: "#c8d4e8", fontSize: 9, gridColumn: "2 / -1" }}>{r.err}</span>
             </div>
           ) : (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "52px 60px 56px 60px 80px 80px 80px 1fr", padding: "9px 10px", borderBottom: "1px solid #08081a", background: i % 2 === 0 ? "#06060f" : "#04040e", alignItems: "center" }}>
@@ -2708,7 +2764,7 @@ function MultiTimeframePanel({ ticker }) {
                 <span style={{ fontSize: 8, color: "#5a6a80" }}>{r.score}</span>
               </span>
               <span style={{ color: r.rsi > 70 ? "#ff3355" : r.rsi < 30 ? "#00ff9d" : "#c8d4e8", fontSize: 11, fontWeight: r.rsi > 70 || r.rsi < 30 ? "bold" : "normal" }}>{r.rsi?.toFixed(1)}</span>
-              <span style={{ fontSize: 9, color: r.macdCross.includes("BULL") ? "#00ff9d" : r.macdCross.includes("BEAR") ? "#ff3355" : "#8a9ab8" }}>{r.macdCross}</span>
+              <span style={{ fontSize: 9, color: r.macdCross.includes("BULL") ? "#00ff9d" : r.macdCross.includes("BEAR") ? "#ff3355" : "#c8d4e8" }}>{r.macdCross}</span>
               <span style={{ fontSize: 9, color: r.aboveSma20 ? "#00ff9d" : "#ff3355" }}>{r.aboveSma20 ? "↑ Above" : "↓ Below"}</span>
               <span style={{ fontSize: 9, color: r.aboveSma50 ? "#00ff9d" : "#ff3355" }}>{r.aboveSma50 ? "↑ Above" : "↓ Below"}</span>
               <span style={{ fontSize: 9 }}>
@@ -2726,7 +2782,7 @@ function MultiTimeframePanel({ ticker }) {
             const total = valid.length || 1;
             return (
               <div style={{ padding: "10px", background: "#04040c", borderRadius: "0 0 4px 4px", display: "flex", gap: 12, alignItems: "center" }}>
-                <span style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>CONFLUENCE</span>
+                <span style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>CONFLUENCE</span>
                 <div style={{ flex: 1, height: 8, background: "#0a0a1a", borderRadius: 4, display: "flex", overflow: "hidden" }}>
                   <div style={{ width: `${bullC / total * 100}%`, background: "#00ff9d", transition: "width .5s" }} />
                   <div style={{ width: `${neutC / total * 100}%`, background: "#ffcc00", transition: "width .5s" }} />
@@ -2740,7 +2796,7 @@ function MultiTimeframePanel({ ticker }) {
           })()}
         </>
       )}
-      {!loading && rows.length === 0 && <div style={{ color: "#1a2a40", fontSize: 10, fontFamily: "monospace", padding: "16px 0" }}>Load a ticker and click Refresh to run multi-timeframe confluence analysis.</div>}
+      {!loading && rows.length === 0 && <div style={{ color: "#4a5a7a", fontSize: 10, fontFamily: "monospace", padding: "16px 0" }}>Load a ticker and click Refresh to run multi-timeframe confluence analysis.</div>}
     </div>
   );
 }
@@ -2788,29 +2844,29 @@ function TradeJournalPanel() {
     <div style={{ padding: 12 }}>
       {/* Form */}
       <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, padding: 10, marginBottom: 10 }}>
-        <div style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 2, marginBottom: 8 }}>LOG TRADE</div>
+        <div style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 2, marginBottom: 8 }}>LOG TRADE</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 8 }}>
           {[["sym", "TICKER", 70, true], ["entry", "ENTRY", 90, false], ["exit", "EXIT", 90, false], ["qty", "QTY", 70, false]].map(([k, ph, w, up]) => (
             <div key={k}>
-              <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>{ph}</div>
+              <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>{ph}</div>
               <input value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: up ? e.target.value.toUpperCase() : e.target.value }))} placeholder={ph}
-                style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: w }} />
+                style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: w }} />
             </div>
           ))}
           <div>
-            <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>DATE</div>
+            <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>DATE</div>
             <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-              style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#8a9ab8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }} />
+              style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }} />
           </div>
           <div>
-            <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>DIR</div>
-            <select value={form.dir} onChange={e => setForm(f => ({ ...f, dir: e.target.value }))} style={{ background: "#04040c", border: "1px solid #1a2a40", color: form.dir === "LONG" ? "#00ff9d" : "#ff3355", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
+            <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>DIR</div>
+            <select value={form.dir} onChange={e => setForm(f => ({ ...f, dir: e.target.value }))} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: form.dir === "LONG" ? "#00ff9d" : "#ff3355", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
               <option value="LONG">▲ LONG</option><option value="SHORT">▼ SHORT</option>
             </select>
           </div>
           <div>
-            <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>MOOD</div>
-            <select value={form.emotion} onChange={e => setForm(f => ({ ...f, emotion: e.target.value }))} style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 13 }}>
+            <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>MOOD</div>
+            <select value={form.emotion} onChange={e => setForm(f => ({ ...f, emotion: e.target.value }))} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 13 }}>
               {EMOJIS.map(em => <option key={em} value={em}>{em}</option>)}
             </select>
           </div>
@@ -2818,15 +2874,15 @@ function TradeJournalPanel() {
         </div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
           {TRADE_TAGS.map(tag => (
-            <button key={tag} onClick={() => toggleTag(tag)} style={{ background: form.tags.includes(tag) ? "#00d4ff20" : "transparent", border: `1px solid ${form.tags.includes(tag) ? "#00d4ff60" : "#1a2a40"}`, color: form.tags.includes(tag) ? "#00d4ff" : "#3a4a60", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>{tag}</button>
+            <button key={tag} onClick={() => toggleTag(tag)} style={{ background: form.tags.includes(tag) ? "#00d4ff20" : "transparent", border: `1px solid ${form.tags.includes(tag) ? "#00d4ff60" : "#4a5a7a"}`, color: form.tags.includes(tag) ? "#00d4ff" : "#3a4a60", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>{tag}</button>
           ))}
         </div>
         <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes / rationale / lessons learned..."
-          style={{ width: "100%", background: "#04040c", border: "1px solid #1a2a40", color: "#8a9ab8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 9, resize: "vertical", minHeight: 44, boxSizing: "border-box" }} />
+          style={{ width: "100%", background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 9, resize: "vertical", minHeight: 44, boxSizing: "border-box" }} />
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
         {["all", "win", "loss"].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "#0f2040" : "transparent", border: `1px solid ${filter === f ? "#00d4ff" : "#1a2a40"}`, color: filter === f ? "#00d4ff" : "#3a4a60", padding: "3px 10px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>{f.toUpperCase()} ({f === "all" ? entries.length : f === "win" ? wins : losses})</button>
+          <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "#0f2040" : "transparent", border: `1px solid ${filter === f ? "#00d4ff" : "#4a5a7a"}`, color: filter === f ? "#00d4ff" : "#3a4a60", padding: "3px 10px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 9 }}>{f.toUpperCase()} ({f === "all" ? entries.length : f === "win" ? wins : losses})</button>
         ))}
         <button onClick={() => setView(v => v === "list" ? "stats" : "list")} style={{ background: "#a855f712", border: "1px solid #a855f730", color: "#a855f7", padding: "3px 12px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 9, marginLeft: "auto" }}>{view === "list" ? "📊 STATS" : "📋 LIST"}</button>
       </div>
@@ -2834,20 +2890,20 @@ function TradeJournalPanel() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
           {[["TOTAL P&L", `${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}`, totalPnl >= 0 ? "#00ff9d" : "#ff3355"], ["WIN RATE", `${winRate}%`, parseFloat(winRate) >= 50 ? "#00ff9d" : "#ff3355"], ["PROFIT FACTOR", profitFactor, parseFloat(profitFactor) >= 1.5 ? "#00ff9d" : "#ff3355"], ["AVG WIN", `$${avgWin.toFixed(2)}`, "#00ff9d"], ["AVG LOSS", `-$${avgLoss.toFixed(2)}`, "#ff3355"], ["TRADES", entries.length, "#00d4ff"]].map(([l, v, c]) => (
             <div key={l} style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, padding: "10px 14px" }}>
-              <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, marginBottom: 4 }}>{l}</div>
+              <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, marginBottom: 4 }}>{l}</div>
               <div style={{ fontSize: 18, fontWeight: "bold", color: c }}>{v}</div>
             </div>
           ))}
           {Object.keys(tagFreq).length > 0 && (
             <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 6, padding: "10px 14px", gridColumn: "span 2" }}>
-              <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, marginBottom: 6 }}>TOP SETUPS</div>
+              <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, marginBottom: 6 }}>TOP SETUPS</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{Object.entries(tagFreq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t, c]) => <span key={t} style={{ fontSize: 9, color: "#00d4ff", background: "#00d4ff12", border: "1px solid #00d4ff30", padding: "2px 8px", borderRadius: 3 }}>{t} ×{c}</span>)}</div>
             </div>
           )}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 300, overflowY: "auto" }}>
-          {filtered.length === 0 && <div style={{ color: "#1a2a40", fontSize: 10, fontFamily: "monospace" }}>No journal entries yet.</div>}
+          {filtered.length === 0 && <div style={{ color: "#4a5a7a", fontSize: 10, fontFamily: "monospace" }}>No journal entries yet.</div>}
           {filtered.map(e => (
             <div key={e.id} style={{ background: "#06060f", border: `1px solid ${e.pnl >= 0 ? "#00ff9d18" : "#ff335518"}`, borderRadius: 5, padding: "8px 12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -2860,7 +2916,7 @@ function TradeJournalPanel() {
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <span style={{ fontWeight: "bold", color: e.pnl >= 0 ? "#00ff9d" : "#ff3355", fontSize: 13 }}>{e.pnl >= 0 ? "+" : ""}${e.pnl.toFixed(2)}</span>
                   <span style={{ color: e.pct >= 0 ? "#00ff9d" : "#ff3355", fontSize: 10 }}>{e.pct >= 0 ? "+" : ""}{e.pct.toFixed(2)}%</span>
-                  <button onClick={() => del(e.id)} style={{ background: "none", border: "none", color: "#2a3a55", cursor: "pointer", fontSize: 11 }}>✕</button>
+                  <button onClick={() => del(e.id)} style={{ background: "none", border: "none", color: "#c8d4e8", cursor: "pointer", fontSize: 11 }}>✕</button>
                 </div>
               </div>
               <div style={{ fontSize: 9, color: "#3a4a60" }}>Entry: {e.entry} → Exit: {e.exit} · Qty: {e.qty}</div>
@@ -2956,13 +3012,13 @@ function ScreenerPanel({ onLoadTicker }) {
     <div style={{ padding: 12 }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, marginBottom: 4 }}>TICKERS (comma-separated, max 20)</div>
+          <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, marginBottom: 4 }}>TICKERS (comma-separated, max 20)</div>
           <input value={tickers} onChange={e => setTickers(e.target.value.toUpperCase())} placeholder="AAPL, MSFT, TSLA..."
-            style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: "100%" }} />
+            style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: "100%" }} />
         </div>
         <div>
-          <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, marginBottom: 4 }}>PRESET</div>
-          <select value={preset} onChange={e => loadPreset(e.target.value)} style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#8a9ab8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
+          <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, marginBottom: 4 }}>PRESET</div>
+          <select value={preset} onChange={e => loadPreset(e.target.value)} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
             <option value="">Custom</option>
             {Object.keys(SCREENER_PRESETS).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
@@ -2971,17 +3027,17 @@ function ScreenerPanel({ onLoadTicker }) {
       </div>
       {results.length > 0 && (
         <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 8, color: "#2a3a55" }}>FILTER</span>
-          {["all", "BULL", "NEUT", "BEAR"].map(f => <button key={f} onClick={() => setFilterBias(f)} style={{ background: filterBias === f ? "#0f2040" : "transparent", border: `1px solid ${filterBias === f ? "#00d4ff" : "#1a2a40"}`, color: filterBias === f ? "#00d4ff" : "#3a4a60", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 8 }}>{f}</button>)}
-          <span style={{ fontSize: 8, color: "#2a3a55", marginLeft: 10 }}>SORT</span>
-          {[["score","SCORE"],["pct","CHANGE%"],["rsi","RSI"]].map(([k,l]) => <button key={k} onClick={() => setSortBy(k)} style={{ background: sortBy === k ? "#0f2040" : "transparent", border: `1px solid ${sortBy === k ? "#00d4ff" : "#1a2a40"}`, color: sortBy === k ? "#00d4ff" : "#3a4a60", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 8 }}>{l}</button>)}
-          <span style={{ fontSize: 8, color: "#2a3a55", marginLeft: "auto" }}>{filtered.length} results</span>
+          <span style={{ fontSize: 8, color: "#c8d4e8" }}>FILTER</span>
+          {["all", "BULL", "NEUT", "BEAR"].map(f => <button key={f} onClick={() => setFilterBias(f)} style={{ background: filterBias === f ? "#0f2040" : "transparent", border: `1px solid ${filterBias === f ? "#00d4ff" : "#4a5a7a"}`, color: filterBias === f ? "#00d4ff" : "#3a4a60", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 8 }}>{f}</button>)}
+          <span style={{ fontSize: 8, color: "#c8d4e8", marginLeft: 10 }}>SORT</span>
+          {[["score","SCORE"],["pct","CHANGE%"],["rsi","RSI"]].map(([k,l]) => <button key={k} onClick={() => setSortBy(k)} style={{ background: sortBy === k ? "#0f2040" : "transparent", border: `1px solid ${sortBy === k ? "#00d4ff" : "#4a5a7a"}`, color: sortBy === k ? "#00d4ff" : "#3a4a60", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", fontSize: 8 }}>{l}</button>)}
+          <span style={{ fontSize: 8, color: "#c8d4e8", marginLeft: "auto" }}>{filtered.length} results</span>
         </div>
       )}
       {filtered.length > 0 && (
         <div style={{ background: "#04040c", borderRadius: 4, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "70px 80px 70px 56px 70px 70px 70px 70px 1fr", padding: "5px 10px", borderBottom: "1px solid #0f1525" }}>
-            {["SYM","PRICE","CHG%","RSI","SMA20","SMA50","ATR%","SCORE","SIGNALS"].map((h,i) => <div key={i} style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>{h}</div>)}
+            {["SYM","PRICE","CHG%","RSI","SMA20","SMA50","ATR%","SCORE","SIGNALS"].map((h,i) => <div key={i} style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>{h}</div>)}
           </div>
           {filtered.map((r, i) => (
             <div key={r.sym} onClick={() => onLoadTicker(r.sym)}
@@ -2992,7 +3048,7 @@ function ScreenerPanel({ onLoadTicker }) {
               <span style={{ color: r.rsi > 70 ? "#ff3355" : r.rsi < 30 ? "#00ff9d" : "#c8d4e8", fontSize: 11 }}>{r.rsi?.toFixed(1)}</span>
               <span style={{ fontSize: 9, color: r.price > r.sma20v ? "#00ff9d" : "#ff3355" }}>{r.price > r.sma20v ? "↑" : "↓"} {r.sma20v?.toFixed(2)}</span>
               <span style={{ fontSize: 9, color: r.price > r.sma50v ? "#00ff9d" : "#ff3355" }}>{r.price > r.sma50v ? "↑" : "↓"} {r.sma50v?.toFixed(2)}</span>
-              <span style={{ fontSize: 9, color: "#8a9ab8" }}>{r.atrPct}%</span>
+              <span style={{ fontSize: 9, color: "#c8d4e8" }}>{r.atrPct}%</span>
               <span>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <div style={{ width: 26, height: 4, background: "#0f1525", borderRadius: 2 }}><div style={{ width: `${r.score}%`, height: "100%", background: biasC[r.bias] || "#888", borderRadius: 2 }} /></div>
@@ -3005,8 +3061,8 @@ function ScreenerPanel({ onLoadTicker }) {
           ))}
         </div>
       )}
-      {errors.length > 0 && <div style={{ marginTop: 6, fontSize: 9, color: "#2a3a55" }}>Failed: {errors.map(e => e.sym).join(", ")}</div>}
-      {!scanning && results.length === 0 && <div style={{ color: "#1a2a40", fontSize: 10, fontFamily: "monospace", padding: "16px 0" }}>Enter tickers or pick a preset, then click Run Scan. Results update live as each ticker loads.</div>}
+      {errors.length > 0 && <div style={{ marginTop: 6, fontSize: 9, color: "#c8d4e8" }}>Failed: {errors.map(e => e.sym).join(", ")}</div>}
+      {!scanning && results.length === 0 && <div style={{ color: "#4a5a7a", fontSize: 10, fontFamily: "monospace", padding: "16px 0" }}>Enter tickers or pick a preset, then click Run Scan. Results update live as each ticker loads.</div>}
     </div>
   );
 }
@@ -3302,7 +3358,7 @@ Based on ALL above signals, reply ONLY with JSON:
   const active   = results.filter(r => r.direction !== "WAIT");
   const equity   = buildEquityCurve(results);
   const biasC    = { BULLISH: "#00ff9d", BEARISH: "#ff3355", NEUTRAL: "#ffcc00" };
-  const exitC    = { TP: "#00ff9d", SL: "#ff3355", timeout: "#ffcc00", skipped: "#2a3a55" };
+  const exitC    = { TP: "#00ff9d", SL: "#ff3355", timeout: "#ffcc00", skipped: "#c8d4e8" };
   const TABS     = [{ id:"results",label:"Results"},{id:"equity",label:"Equity Curve"},{id:"confluence",label:"By Confluence"},{id:"info",label:"How It Works"}];
 
   return (
@@ -3310,25 +3366,25 @@ Based on ALL above signals, reply ONLY with JSON:
       {/* ── Controls ── */}
       <div style={{ display: "flex", gap: 10, alignItems: "flex-end", marginBottom: 10, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>STEP (every N bars)</div>
+          <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>STEP (every N bars)</div>
           <select value={stepSize} onChange={e => setStepSize(+e.target.value)}
-            style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
+            style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
             {[3,5,8,10,15,20].map(v => <option key={v} value={v}>Every {v} bars (~{Math.floor((candles.length-62)/v)} signals)</option>)}
           </select>
         </div>
         <div>
-          <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>MIN CONFIDENCE</div>
+          <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>MIN CONFIDENCE</div>
           <select value={minConf} onChange={e => setMinConf(+e.target.value)}
-            style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
+            style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 10 }}>
             {[0,50,60,65,70,75,80].map(v => <option key={v} value={v}>{v === 0 ? "All signals" : `≥${v}% confidence`}</option>)}
           </select>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer", fontSize: 9, color: "#8a9ab8" }}>
+          <label style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer", fontSize: 9, color: "#c8d4e8" }}>
             <input type="checkbox" checked={useMemory} onChange={e => setUseMemory(e.target.checked)} />
             Inject AI memory into prompts
           </label>
-          <label style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer", fontSize: 9, color: "#8a9ab8" }}>
+          <label style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer", fontSize: 9, color: "#c8d4e8" }}>
             <input type="checkbox" checked={autoEvolve} onChange={e => setAutoEvolve(e.target.checked)} />
             Auto-evolve rules when done
           </label>
@@ -3355,7 +3411,7 @@ Based on ALL above signals, reply ONLY with JSON:
             <div style={{ width: `${progress}%`, height: "100%", background: "linear-gradient(90deg,#00ff9d,#00d4ff)", borderRadius: 3, transition: "width .4s" }} />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
-            <span style={{ fontSize: 8, color: "#2a3a55" }}>{results.filter(r=>r.direction!=="WAIT").length} signals tested · {progress}% complete</span>
+            <span style={{ fontSize: 8, color: "#c8d4e8" }}>{results.filter(r=>r.direction!=="WAIT").length} signals tested · {progress}% complete</span>
             {useMemory && <span style={{ fontSize: 8, color: "#a855f7" }}>🧠 Memory-aware · learning live</span>}
           </div>
         </div>
@@ -3381,7 +3437,7 @@ Based on ALL above signals, reply ONLY with JSON:
               ["SHORT WR",  `${summary.shortWR}%`,      "#ff3355"],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 4, padding: "4px 9px" }}>
-                <div style={{ fontSize: 7, color: "#2a3a55" }}>{l}</div>
+                <div style={{ fontSize: 7, color: "#c8d4e8" }}>{l}</div>
                 <div style={{ fontSize: 12, fontWeight: "bold", color: c }}>{v}</div>
               </div>
             ))}
@@ -3397,7 +3453,7 @@ Based on ALL above signals, reply ONLY with JSON:
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #0f1525", marginBottom: 8 }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ background: "transparent", border: "none", borderBottom: tab===t.id?"2px solid #00d4ff":"2px solid transparent", color: tab===t.id?"#00d4ff":"#2a3a55", padding: "5px 12px", cursor: "pointer", fontFamily: "monospace", fontSize: 8 }}>
+              style={{ background: "transparent", border: "none", borderBottom: tab===t.id?"2px solid #00d4ff":"2px solid transparent", color: tab===t.id?"#00d4ff":"#c8d4e8", padding: "5px 12px", cursor: "pointer", fontFamily: "monospace", fontSize: 8 }}>
               {t.label}
             </button>
           ))}
@@ -3408,7 +3464,7 @@ Based on ALL above signals, reply ONLY with JSON:
       {tab === "results" && results.length > 0 && (
         <div style={{ background: "#04040c", borderRadius: 4, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "54px 70px 55px 40px 42px 70px 70px 60px 55px 50px 1fr", padding: "4px 8px", borderBottom: "1px solid #0f1525", position: "sticky", top: 0, background: "#04040c" }}>
-            {["DATE","BIAS","DIR","CONF","CS","ENTRY","EXIT","P&L","EXIT WHY","BARS","SIGNALS"].map((h,i)=><div key={i} style={{fontSize:7,color:"#2a3a55"}}>{h}</div>)}
+            {["DATE","BIAS","DIR","CONF","CS","ENTRY","EXIT","P&L","EXIT WHY","BARS","SIGNALS"].map((h,i)=><div key={i} style={{fontSize:7,color:"#c8d4e8"}}>{h}</div>)}
           </div>
           <div style={{ maxHeight: 280, overflowY: "auto" }}>
             {results.map((r, i) => (
@@ -3416,10 +3472,10 @@ Based on ALL above signals, reply ONLY with JSON:
                 <span style={{ fontSize: 7, color: "#5a6a80" }}>{r.date}</span>
                 <span style={{ fontSize: 8, fontWeight: "bold", color: biasC[r.bias]||"#888" }}>{r.bias}</span>
                 <span style={{ fontSize: 8, color: r.direction==="LONG"?"#00ff9d":r.direction==="SHORT"?"#ff3355":"#ffcc00" }}>{r.direction}</span>
-                <span style={{ fontSize: 8, color: (r.confidence||0)>=70?"#a855f7":"#8a9ab8" }}>{r.confidence}%</span>
+                <span style={{ fontSize: 8, color: (r.confidence||0)>=70?"#a855f7":"#c8d4e8" }}>{r.confidence}%</span>
                 <span style={{ fontSize: 8, color: (r.confluenceScore||0)>=60?"#00ff9d":(r.confluenceScore||0)>=35?"#ffcc00":"#ff3355" }}>{r.confluenceScore||0}</span>
-                <span style={{ fontSize: 8, color: "#8a9ab8" }}>{r.entry<10?r.entry?.toFixed(4):r.entry?.toFixed(2)}</span>
-                <span style={{ fontSize: 8, color: "#8a9ab8" }}>{r.exit<10?r.exit?.toFixed(4):r.exit?.toFixed(2)}</span>
+                <span style={{ fontSize: 8, color: "#c8d4e8" }}>{r.entry<10?r.entry?.toFixed(4):r.entry?.toFixed(2)}</span>
+                <span style={{ fontSize: 8, color: "#c8d4e8" }}>{r.exit<10?r.exit?.toFixed(4):r.exit?.toFixed(2)}</span>
                 <span style={{ fontSize: 9, fontWeight: "bold", color: r.pnlPct>=0?"#00ff9d":"#ff3355" }}>{r.pnlPct>=0?"+":""}{r.pnlPct?.toFixed(2)}%</span>
                 <span style={{ fontSize: 8, color: exitC[r.exitReason]||"#888" }}>{r.exitReason}</span>
                 <span style={{ fontSize: 8, color: "#3a4a60" }}>{r.barsHeld}</span>
@@ -3433,7 +3489,7 @@ Based on ALL above signals, reply ONLY with JSON:
       {/* ── Equity curve ── */}
       {tab === "equity" && equity.length > 0 && (
         <div style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 5, padding: 10 }}>
-          <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 6 }}>Equity curve (starting $1000, compounded)</div>
+          <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 6 }}>Equity curve (starting $1000, compounded)</div>
           <svg width="100%" height={140} style={{ overflow: "visible" }}>
             {(() => {
               const vals  = equity.map(e => e.equity);
@@ -3449,9 +3505,9 @@ Based on ALL above signals, reply ONLY with JSON:
                 <defs><linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity={0.25}/><stop offset="100%" stopColor={col} stopOpacity={0}/></linearGradient></defs>
                 <path d={`${path} L${xOf(equity.length-1)},${H} L0,${H} Z`} fill="url(#eqGrad)" />
                 <path d={path} fill="none" stroke={col} strokeWidth={2} />
-                <line x1={0} y1={yOf(1000)} x2={W} y2={yOf(1000)} stroke="#2a3a55" strokeWidth={1} strokeDasharray="4,3" />
+                <line x1={0} y1={yOf(1000)} x2={W} y2={yOf(1000)} stroke="#c8d4e8" strokeWidth={1} strokeDasharray="4,3" />
                 {equity.filter((_,i)=>i%Math.ceil(equity.length/6)===0).map((e,i)=>(
-                  <text key={i} x={xOf(equity.indexOf(e))} y={H+16} fontSize={8} fill="#2a3a55" textAnchor="middle" fontFamily="monospace">{e.date}</text>
+                  <text key={i} x={xOf(equity.indexOf(e))} y={H+16} fontSize={8} fill="#c8d4e8" textAnchor="middle" fontFamily="monospace">{e.date}</text>
                 ))}
                 <text x={W} y={yOf(final)-4} fontSize={9} fill={col} textAnchor="end" fontFamily="monospace" fontWeight="bold">${final.toFixed(0)}</text>
               </>);
@@ -3463,7 +3519,7 @@ Based on ALL above signals, reply ONLY with JSON:
       {/* ── By confluence ── */}
       {tab === "confluence" && (
         <div>
-          <div style={{ fontSize: 9, color: "#2a3a55", marginBottom: 8 }}>Win rate by confluence score bucket (0-100)</div>
+          <div style={{ fontSize: 9, color: "#c8d4e8", marginBottom: 8 }}>Win rate by confluence score bucket (0-100)</div>
           {["elite","high","medium","low"].map(lvl => {
             const range = { elite:[75,100], high:[50,74], medium:[25,49], low:[0,24] }[lvl];
             const bucket = active.filter(r => (r.confluenceScore||0) >= range[0] && (r.confluenceScore||0) <= range[1]);
@@ -3478,7 +3534,7 @@ Based on ALL above signals, reply ONLY with JSON:
                   <div style={{ display: "flex", gap: 12 }}>
                     <span style={{ fontSize: 11, fontWeight: "bold", color: col }}>{wr.toFixed(0)}% WR</span>
                     <span style={{ fontSize: 9, color: avgP>=0?"#00ff9d":"#ff3355" }}>avg {avgP>=0?"+":""}{avgP.toFixed(2)}%</span>
-                    <span style={{ fontSize: 8, color: "#2a3a55" }}>{bucket.length} trades</span>
+                    <span style={{ fontSize: 8, color: "#c8d4e8" }}>{bucket.length} trades</span>
                   </div>
                 </div>
                 <div style={{ width: "100%", height: 7, background: "#0f1525", borderRadius: 3 }}>
@@ -3508,7 +3564,7 @@ Based on ALL above signals, reply ONLY with JSON:
       )}
 
       {!running && results.length === 0 && !saved[btKey] && (
-        <div style={{ color: "#1a2a40", fontSize: 9, fontFamily: "monospace", lineHeight: 1.9 }}>
+        <div style={{ color: "#4a5a7a", fontSize: 9, fontFamily: "monospace", lineHeight: 1.9 }}>
           {["NEXUS BACKTEST ENGINE — fully connected to AI Intelligence.", "","→ Bar-by-bar replay with real Groq API calls", "→ All 20+ feature dimensions extracted per bar", "→ ATR-based SL/TP simulation (not just lookahead)", "→ Memory context injected into each prompt", "→ Confluence scoring per signal", "→ Real-time recording to AI Memory", "→ Auto-evolve rules on completion", "→ Equity curve + Sharpe ratio", "","Load a ticker then Run Backtest.","⚠ Uses 1 Groq API call per step."].map(l=><div key={l}>{l}</div>)}
         </div>
       )}
@@ -3563,7 +3619,7 @@ function PaperTradingPanel({ candles, ticker, tf, groqKey, groqModel, analysis, 
     persist({ ...paper, positions:open, history:hist.slice(0,100), capital:cap });
   }, [lastPrice]);
 
-  const addLog = (msg, col = "#8a9ab8") => setLog(prev => [{ msg, col, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 50));
+  const addLog = (msg, col = "#c8d4e8") => setLog(prev => [{ msg, col, ts: new Date().toLocaleTimeString() }, ...prev].slice(0, 50));
 
   // Scan current ticker and potentially open/close paper positions
   const scanNow = async () => {
@@ -3749,7 +3805,7 @@ Reply ONLY with raw JSON:
       // Rich log output
       const dirCol = sig.direction==="LONG"?"#00ff9d":sig.direction==="SHORT"?"#ff3355":"#ffcc00";
       addLog(`━━━ SCAN: ${sig.bias}(${sig.confidence}%) CS:${fv.confluenceScore}/100 → ${sig.direction} ━━━`, dirCol);
-      if (sig.summary) addLog(`📊 ${sig.summary}`, "#8a9ab8");
+      if (sig.summary) addLog(`📊 ${sig.summary}`, "#c8d4e8");
       if (sig.keySignals?.length) sig.keySignals.forEach(s => addLog(`  ✓ ${s}`, "#00d4ff80"));
       if (sig.risks) addLog(`  ⚠ Risk: ${sig.risks}`, "#ff8c0080");
       if (sig.regime_note) addLog(`  📐 Regime: ${sig.regime_note}`, "#a855f780");
@@ -3795,7 +3851,7 @@ Reply ONLY with raw JSON:
           addLog(`Signal meets threshold but insufficient capital or size too large`, "#ffcc0080");
         }
       } else if (sig.direction !== "WAIT" && ((sig.confidence||0) < minConfPaper || fv.confluenceScore < minCSPaper)) {
-        addLog(`Signal skipped: conf ${sig.confidence}%<${minConfPaper}% or CS ${fv.confluenceScore}<${minCSPaper}`, "#2a3a55");
+        addLog(`Signal skipped: conf ${sig.confidence}%<${minConfPaper}% or CS ${fv.confluenceScore}<${minCSPaper}`, "#c8d4e8");
       }
 
       persist(state);
@@ -3806,7 +3862,7 @@ Reply ONLY with raw JSON:
   // Auto-scan timer
   useEffect(() => {
     if (autoScan) { autoRef.current = setInterval(scanNow, 60000); addLog("Auto-scan enabled (every 60s)", "#00d4ff80"); }
-    else { clearInterval(autoRef.current); if (autoScan === false) addLog("Auto-scan disabled", "#2a3a55"); }
+    else { clearInterval(autoRef.current); if (autoScan === false) addLog("Auto-scan disabled", "#c8d4e8"); }
     return () => clearInterval(autoRef.current);
   }, [autoScan]);
 
@@ -3840,7 +3896,7 @@ Reply ONLY with raw JSON:
           ["TRADES",      paper.history.length,            "#a855f7"],
         ].map(([l, v, c]) => (
           <div key={l} style={{ background: "#06060f", border: "1px solid #0f1525", borderRadius: 4, padding: "4px 10px" }}>
-            <div style={{ fontSize: 7, color: "#2a3a55" }}>{l}</div>
+            <div style={{ fontSize: 7, color: "#c8d4e8" }}>{l}</div>
             <div style={{ fontSize: 13, fontWeight: "bold", color: c }}>{v}</div>
           </div>
         ))}
@@ -3850,20 +3906,20 @@ Reply ONLY with raw JSON:
       {/* Controls */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10, background: "#06060f", border: "1px solid #0f1525", borderRadius: 5, padding: 10 }}>
         <div>
-          <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>MIN CONFLUENCE</div>
-          <select value={minCSPaper} onChange={e => setMinCSPaper(+e.target.value)} style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }}>
+          <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>MIN CONFLUENCE</div>
+          <select value={minCSPaper} onChange={e => setMinCSPaper(+e.target.value)} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }}>
             {[0,25,35,50,60,70].map(v=><option key={v} value={v}>CS ≥ {v}</option>)}
           </select>
         </div>
         <div>
-          <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>MIN CONFIDENCE</div>
-          <select value={minConfPaper} onChange={e => setMinConfPaper(+e.target.value)} style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }}>
+          <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>MIN CONFIDENCE</div>
+          <select value={minConfPaper} onChange={e => setMinConfPaper(+e.target.value)} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }}>
             {[0,50,60,65,70,75,80].map(v=><option key={v} value={v}>Conf ≥ {v}%</option>)}
           </select>
         </div>
         <div>
-          <div style={{ fontSize: 8, color: "#2a3a55", marginBottom: 3 }}>RISK PER TRADE</div>
-          <select value={riskPct} onChange={e => setRiskPct(+e.target.value)} style={{ background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }}>
+          <div style={{ fontSize: 8, color: "#c8d4e8", marginBottom: 3 }}>RISK PER TRADE</div>
+          <select value={riskPct} onChange={e => setRiskPct(+e.target.value)} style={{ background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "4px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 9 }}>
             {[0.5,1,1.5,2,3].map(v=><option key={v} value={v}>{v}% of capital</option>)}
           </select>
         </div>
@@ -3871,7 +3927,7 @@ Reply ONLY with raw JSON:
           style={{ background: "#00ff9d18", border: "1px solid #00ff9d40", color: "#00ff9d", padding: "5px 14px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 9, fontWeight: "bold" }}>
           {scanning ? "⟳ SCANNING..." : "🔍 SCAN NOW"}
         </button>
-        <label style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer", fontSize: 9, color: autoScan?"#00ff9d":"#8a9ab8", border: `1px solid ${autoScan?"#00ff9d30":"#1a2a40"}`, padding: "4px 10px", borderRadius: 4 }}>
+        <label style={{ display: "flex", gap: 5, alignItems: "center", cursor: "pointer", fontSize: 9, color: autoScan?"#00ff9d":"#c8d4e8", border: `1px solid ${autoScan?"#00ff9d30":"#4a5a7a"}`, padding: "4px 10px", borderRadius: 4 }}>
           <input type="checkbox" checked={autoScan} onChange={e => setAutoScan(e.target.checked)} />
           AUTO-SCAN (60s)
         </label>
@@ -3881,8 +3937,8 @@ Reply ONLY with raw JSON:
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {/* Open positions */}
         <div>
-          <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 2, marginBottom: 6 }}>OPEN POSITIONS ({paper.positions.length})</div>
-          {paper.positions.length === 0 ? <div style={{ color: "#1a2a40", fontSize: 9 }}>No open positions. Click Scan Now to analyze current chart.</div> :
+          <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 2, marginBottom: 6 }}>OPEN POSITIONS ({paper.positions.length})</div>
+          {paper.positions.length === 0 ? <div style={{ color: "#4a5a7a", fontSize: 9 }}>No open positions. Click Scan Now to analyze current chart.</div> :
             paper.positions.map(p => {
               const price   = p.sym === ticker ? (lastPrice || p.entry) : p.entry;
               const pnlPct  = p.dir === "LONG" ? (price - p.entry) / p.entry * 100 : (p.entry - price) / p.entry * 100;
@@ -3907,12 +3963,12 @@ Reply ONLY with raw JSON:
         {/* Activity log */}
         <div>
           <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-            <span style={{ fontSize:8, color:"#2a3a55", letterSpacing:2 }}>SCAN INTELLIGENCE LOG</span>
-            {log.length > 0 && <button onClick={()=>setLog([])} style={{ background:"none", border:"none", color:"#2a3a55", cursor:"pointer", fontSize:8 }}>CLEAR</button>}
+            <span style={{ fontSize:8, color:"#c8d4e8", letterSpacing:2 }}>SCAN INTELLIGENCE LOG</span>
+            {log.length > 0 && <button onClick={()=>setLog([])} style={{ background:"none", border:"none", color:"#c8d4e8", cursor:"pointer", fontSize:8 }}>CLEAR</button>}
           </div>
           <div style={{ background:"#04040c", borderRadius:4, padding:6, maxHeight:340, overflowY:"auto" }}>
             {log.length === 0 && (
-              <div style={{ color:"#1a2a40", fontSize:8, lineHeight:1.9 }}>
+              <div style={{ color:"#4a5a7a", fontSize:8, lineHeight:1.9 }}>
                 {["Scan intelligence log will appear here.","","Each scan sends the AI:","→ All SMC signals with context","→ Candle patterns classified","→ Divergences with meaning","→ Fibonacci levels","→ Volume profile (VPOC)","→ Market regime","→ Learned memory from past trades"].map(l=><div key={l}>{l}</div>)}
               </div>
             )}
@@ -3920,8 +3976,8 @@ Reply ONLY with raw JSON:
               const isHeader = l.msg.startsWith("━━━");
               const isDetail = l.msg.startsWith("  ");
               return (
-                <div key={i} style={{ fontSize:isHeader?9:8, fontWeight:isHeader?"bold":"normal", color:l.col, lineHeight:1.7, borderBottom:isHeader?"1px solid #1a2a40":"1px solid #06060f", padding:isHeader?"5px 0":"1px 0", marginTop:isHeader?8:0, paddingLeft:isDetail?10:0 }}>
-                  {isHeader ? l.msg : <><span style={{ color:"#1a2a40", marginRight:5, fontSize:7 }}>{l.ts}</span>{l.msg}</>}
+                <div key={i} style={{ fontSize:isHeader?9:8, fontWeight:isHeader?"bold":"normal", color:l.col, lineHeight:1.7, borderBottom:isHeader?"1px solid #4a5a7a":"1px solid #06060f", padding:isHeader?"5px 0":"1px 0", marginTop:isHeader?8:0, paddingLeft:isDetail?10:0 }}>
+                  {isHeader ? l.msg : <><span style={{ color:"#4a5a7a", marginRight:5, fontSize:7 }}>{l.ts}</span>{l.msg}</>}
                 </div>
               );
             })}
@@ -3932,18 +3988,18 @@ Reply ONLY with raw JSON:
       {/* Trade history */}
       {paper.history.length > 0 && (
         <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 2, marginBottom: 6 }}>CLOSED TRADES ({paper.history.length})</div>
+          <div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 2, marginBottom: 6 }}>CLOSED TRADES ({paper.history.length})</div>
           <div style={{ background: "#04040c", borderRadius: 4, overflow: "hidden" }}>
             <div style={{ display: "grid", gridTemplateColumns: "60px 55px 70px 70px 70px 70px 1fr", padding: "4px 8px", borderBottom: "1px solid #0f1525" }}>
-              {["DATE","DIR","ENTRY","EXIT","P&L%","P&L$","CLOSED BY"].map((h,i)=><div key={i} style={{fontSize:7,color:"#2a3a55"}}>{h}</div>)}
+              {["DATE","DIR","ENTRY","EXIT","P&L%","P&L$","CLOSED BY"].map((h,i)=><div key={i} style={{fontSize:7,color:"#c8d4e8"}}>{h}</div>)}
             </div>
             <div style={{ maxHeight: 180, overflowY: "auto" }}>
               {paper.history.map((h, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 55px 70px 70px 70px 70px 1fr", padding: "5px 8px", borderBottom: "1px solid #08081a", background: (h.pnlDollar||0)>=0?"#001508":"#06060f", alignItems: "center" }}>
                   <span style={{ fontSize: 8, color: "#5a6a80" }}>{h.exitDate}</span>
                   <span style={{ fontSize: 8, color: h.dir==="LONG"?"#00ff9d":"#ff3355" }}>{h.dir}</span>
-                  <span style={{ fontSize: 8, color: "#8a9ab8" }}>{h.entry?.toFixed(4)}</span>
-                  <span style={{ fontSize: 8, color: "#8a9ab8" }}>{h.exitPrice?.toFixed(4)}</span>
+                  <span style={{ fontSize: 8, color: "#c8d4e8" }}>{h.entry?.toFixed(4)}</span>
+                  <span style={{ fontSize: 8, color: "#c8d4e8" }}>{h.exitPrice?.toFixed(4)}</span>
                   <span style={{ fontSize: 9, fontWeight:"bold", color: h.pnlPct>=0?"#00ff9d":"#ff3355" }}>{h.pnlPct>=0?"+":""}{h.pnlPct?.toFixed(2)}%</span>
                   <span style={{ fontSize: 9, color: h.pnlDollar>=0?"#00ff9d":"#ff3355" }}>{h.pnlDollar>=0?"+":""}${h.pnlDollar?.toFixed(2)}</span>
                   <span style={{ fontSize: 8, color: "#3a4a60" }}>{h.closedBy} · {h.reason}</span>
@@ -4003,6 +4059,9 @@ export default function NexusTrader() {
   const [drawTool, setDrawTool] = useState("none"); // none | hline | tline | ray
   const [drawings, setDrawings] = useState(() => { try { return JSON.parse(localStorage.getItem("nx_drawings") || "{}"); } catch { return {}; } });
   const [chatOpen, setChatOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearch, setShowSearch] = useState(false);
   const drawKey = `${ticker}-${tf}`;
   const activeDrawings = drawings[drawKey] || [];
   const saveDrawings = (key, arr) => { const next = { ...drawings, [key]: arr }; setDrawings(next); try { localStorage.setItem("nx_drawings", JSON.stringify(next)); } catch {} };
@@ -4069,6 +4128,23 @@ export default function NexusTrader() {
 
   const loadFromWatchlist = (sym) => { setTicker(sym); setTimeout(() => fetchData(sym), 50); };
 
+  // Search debounce effect
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (searchQuery.length >= 2) {
+        try {
+          const results = await searchStocks(searchQuery);
+          setSearchResults(results);
+          setShowSearch(true);
+        } catch {}
+      } else {
+        setSearchResults([]);
+        setShowSearch(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const TOOLS = { h: "hline", t: "tline", r: "ray" };
@@ -4078,7 +4154,7 @@ export default function NexusTrader() {
       const k = e.key;
       if (k === "f" || k === "F") { fetchData(); return; }
       if (k === "a" || k === "A") { analyzeWithGroq(); return; }
-      if (k === "Escape") { setDrawTool("none"); return; }
+      if (k === "Escape") { setDrawTool("none"); setShowSearch(false); return; }
       if (k === "x" || k === "X") { clearDrawings(); return; }
       if (k === "c" || k === "C") { setChatOpen(o => !o); return; }
       if (TOOLS[k]) { setDrawTool(t => t === TOOLS[k] ? "none" : TOOLS[k]); return; }
@@ -4203,14 +4279,14 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
     wrap: { background: "linear-gradient(135deg,#04040c 0%,#060611 100%)", minHeight: "100vh", color: "#c8d4e8", fontFamily: "'JetBrains Mono',monospace", fontSize: 12 },
     header: { background: "#06060f", borderBottom: "1px solid #0f1525", padding: "10px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
     logoText: { fontSize: 15, fontWeight: "bold", letterSpacing: 3, background: "linear-gradient(90deg,#00ff9d,#00d4ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
-    tickerInput: { background: "#0a0a1a", border: "1px solid #1a2a40", color: "#00ff9d", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 13, fontWeight: "bold", width: 90, textTransform: "uppercase", letterSpacing: 2 },
-    tfBtn: (a) => ({ background: a ? "#0f2040" : "transparent", border: `1px solid ${a ? "#00d4ff" : "#1a2a40"}`, color: a ? "#00d4ff" : "#3a4a60", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontSize: 10, fontFamily: "monospace" }),
+    tickerInput: { background: "#0a0a1a", border: "1px solid #4a5a7a", color: "#00ff9d", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 13, fontWeight: "bold", width: 90, textTransform: "uppercase", letterSpacing: 2 },
+    tfBtn: (a) => ({ background: a ? "#0f2040" : "transparent", border: `1px solid ${a ? "#00d4ff" : "#4a5a7a"}`, color: a ? "#00d4ff" : "#3a4a60", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontSize: 10, fontFamily: "monospace" }),
     btn: (col = "#00d4ff") => ({ background: `${col}15`, border: `1px solid ${col}55`, color: col, padding: "6px 14px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 11, fontWeight: "bold", letterSpacing: 1 }),
     panel: { background: "#06060f", border: "1px solid #0f1525", borderRadius: 6 },
-    panelHead: { padding: "8px 12px", borderBottom: "1px solid #0f1525", fontSize: 10, color: "#2a3a55", letterSpacing: 2 },
+    panelHead: { padding: "8px 12px", borderBottom: "1px solid #0f1525", fontSize: 10, color: "#c8d4e8", letterSpacing: 2 },
     badge: (sig) => ({ display: "inline-block", background: `${sigCol[sig] || "#888"}18`, border: `1px solid ${sigCol[sig] || "#888"}40`, color: sigCol[sig] || "#888", padding: "2px 7px", borderRadius: 3, fontSize: 10, margin: "2px" }),
     stat: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 12px", borderBottom: "1px solid #0a0a1a" },
-    inp: { background: "#04040c", border: "1px solid #1a2a40", color: "#c8d4e8", padding: "8px 12px", borderRadius: 4, fontFamily: "monospace", fontSize: 12, width: "100%", boxSizing: "border-box" },
+    inp: { background: "#04040c", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "8px 12px", borderRadius: 4, fontFamily: "monospace", fontSize: 12, width: "100%", boxSizing: "border-box" },
   };
 
   return (
@@ -4220,14 +4296,39 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 8 }}>
           <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#00ff9d,#00d4ff)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🔮</div>
           <span style={S.logoText}>NEXUS</span>
-          <span style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1 }}>AI TRADER v2</span>
+          <span style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1 }}>AI TRADER v2</span>
         </div>
-        <input value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && fetchData()} style={S.tickerInput} placeholder="AAPL" />
+        <div style={{ position: "relative" }}>
+          <input 
+            value={ticker} 
+            onChange={(e) => { setTicker(e.target.value.toUpperCase()); setSearchQuery(e.target.value); }} 
+            onKeyDown={e => e.key === "Enter" && fetchData()} 
+            onFocus={() => searchQuery.length >= 2 && setShowSearch(true)}
+            style={S.tickerInput} 
+            placeholder="AAPL or search..." 
+          />
+          {showSearch && searchResults.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 1000, background: "#0a0a1a", border: "1px solid #4a5a7a", borderRadius: 4, minWidth: 250, maxHeight: 300, overflowY: "auto" }}>
+              {searchResults.map((r, i) => (
+                <div 
+                  key={i} 
+                  onClick={() => { setTicker(r.symbol); setSearchQuery(""); setShowSearch(false); setTimeout(() => fetchData(r.symbol), 50); }}
+                  style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #0f1525", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  onMouseOver={(e) => e.currentTarget.style.background = "#0f2040"}
+                  onMouseOut={(e) => e.currentTarget.style.background = "transparent"}
+                >
+                  <span style={{ color: "#00ff9d", fontWeight: "bold", fontSize: 12 }}>{r.symbol}</span>
+                  <span style={{ color: "#c8d4e8", fontSize: 10 }}>{r.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 4 }}>{TIMEFRAMES.map(t => <button key={t.val} style={S.tfBtn(tf === t.val)} onClick={() => setTf(t.val)}>{t.label}</button>)}</div>
         <button style={S.btn("#00d4ff")} onClick={() => fetchData()} disabled={loading}>{loading ? "⟳ LOADING..." : "⬇ FETCH"}</button>
         {candles.length > 0 && <button style={S.btn(aiLoading ? "#ffcc00" : "#00ff9d")} onClick={analyzeWithGroq} disabled={aiLoading}>{aiLoading ? "⟳ ANALYZING..." : "🧠 AI ANALYZE"}</button>}
         <button style={{ ...S.btn("#3a4a60"), marginLeft: "auto" }} onClick={() => setShowSettings(true)}>⚙ API KEYS</button>
-        <div style={{ fontSize: 7, color: "#1a2a40", lineHeight: 1.6, display: "none" }} className="kbd-hints">F=Fetch A=AI 1-6=TF H/T/R=Draw C=Chat X=Clear ESC=Cancel</div>
+        <div style={{ fontSize: 7, color: "#4a5a7a", lineHeight: 1.6, display: "none" }} className="kbd-hints">F=Fetch A=AI 1-6=TF H/T/R=Draw C=Chat X=Clear ESC=Cancel</div>
         {last && <div style={{ textAlign: "right", lineHeight: 1.4 }}>
           <div style={{ fontSize: 16, fontWeight: "bold", color: pctChange >= 0 ? "#00ff9d" : "#ff3355" }}>{last.close?.toFixed(4)}</div>
           <div style={{ fontSize: 10, color: pctChange >= 0 ? "#00ff9d" : "#ff3355" }}>{pctChange >= 0 ? "▲" : "▼"} {Math.abs(pctChange).toFixed(2)}%</div>
@@ -4244,18 +4345,18 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
             <div style={S.panel}>
               <div style={S.panelHead}>LIVE DATA</div>
               {[["PRICE", last.close?.toFixed(4), pctChange >= 0 ? "#00ff9d" : "#ff3355"], ["OPEN", last.open?.toFixed(4), "#c8d4e8"], ["HIGH", last.high?.toFixed(4), "#00ff9d"], ["LOW", last.low?.toFixed(4), "#ff3355"], ["VOLUME", last.volume > 1e6 ? (last.volume / 1e6).toFixed(1) + "M" : last.volume?.toLocaleString(), "#00d4ff"], ["RSI(14)", lastRSI?.toFixed(1), lastRSI > 70 ? "#ff3355" : lastRSI < 30 ? "#00ff9d" : "#ffcc00"], ["MACD", lastMACDHist > 0 ? "▲ BULL" : "▼ BEAR", lastMACDHist > 0 ? "#00ff9d" : "#ff3355"]].map(([k, v, col]) => (
-                <div key={k} style={S.stat}><span style={{ color: "#2a3a55", fontSize: 9, letterSpacing: 1 }}>{k}</span><span style={{ color: col, fontWeight: "bold", fontSize: 11 }}>{v}</span></div>
+                <div key={k} style={S.stat}><span style={{ color: "#c8d4e8", fontSize: 9, letterSpacing: 1 }}>{k}</span><span style={{ color: col, fontWeight: "bold", fontSize: 11 }}>{v}</span></div>
               ))}
               {[["SMA20", analysis.s20], ["SMA50", analysis.s50]].map(([label, arr]) => {
                 const val = arr.filter(v => v).slice(-1)[0] || 0;
-                return <div key={label} style={S.stat}><span style={{ color: "#2a3a55", fontSize: 9, letterSpacing: 1 }}>{label}</span><span style={{ color: last.close > val ? "#00ff9d" : "#ff3355", fontSize: 10 }}>{last.close > val ? "↑ ABOVE" : "↓ BELOW"}</span></div>;
+                return <div key={label} style={S.stat}><span style={{ color: "#c8d4e8", fontSize: 9, letterSpacing: 1 }}>{label}</span><span style={{ color: last.close > val ? "#00ff9d" : "#ff3355", fontSize: 10 }}>{last.close > val ? "↑ ABOVE" : "↓ BELOW"}</span></div>;
               })}
             </div>
           )}
           <div style={S.panel}>
             <div style={S.panelHead}>CANDLE PATTERNS</div>
             <div style={{ padding: 8, maxHeight: 160, overflowY: "auto" }}>
-              {!analysis?.patterns.length ? <div style={{ color: "#2a3a55", fontSize: 10 }}>No patterns yet</div>
+              {!analysis?.patterns.length ? <div style={{ color: "#c8d4e8", fontSize: 10 }}>No patterns yet</div>
                 : analysis.patterns.slice(-6).reverse().map((p, i) => <div key={i} style={{ marginBottom: 3 }}><span style={S.badge(p.sig)}>{p.sig === "bullish" ? "▲" : p.sig === "bearish" ? "▼" : "◆"} {p.name}</span></div>)}
             </div>
           </div>
@@ -4267,14 +4368,14 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
             <div style={{ background:"#06060f", border:`1px solid ${analysis.regime.regime==="trending"?"#00ff9d30":analysis.regime.regime==="volatile"?"#ff335530":analysis.regime.regime==="squeeze"?"#ffcc0030":"#0f1525"}`, borderRadius:6 }}>
               <div style={{ padding:"7px 12px" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:3 }}>
-                  <span style={{ fontSize:8, color:"#2a3a55", letterSpacing:2 }}>REGIME</span>
-                  <span style={{ fontSize:10, fontWeight:"bold", color:analysis.regime.regime==="trending"?"#00ff9d":analysis.regime.regime==="volatile"?"#ff3355":analysis.regime.regime==="squeeze"?"#ffcc00":"#8a9ab8" }}>
+                  <span style={{ fontSize:8, color:"#c8d4e8", letterSpacing:2 }}>REGIME</span>
+                  <span style={{ fontSize:10, fontWeight:"bold", color:analysis.regime.regime==="trending"?"#00ff9d":analysis.regime.regime==="volatile"?"#ff3355":analysis.regime.regime==="squeeze"?"#ffcc00":"#c8d4e8" }}>
                     {analysis.regime.regime.toUpperCase()}{analysis.regime.sub?` · ${analysis.regime.sub}`:""}
                   </span>
-                  <span style={{ fontSize:8, color:"#2a3a55" }}>{analysis.regime.confidence}%</span>
+                  <span style={{ fontSize:8, color:"#c8d4e8" }}>{analysis.regime.confidence}%</span>
                 </div>
                 <div style={{ fontSize:8, color:"#5a6a60", lineHeight:1.5 }}>{analysis.regime.detail}</div>
-                <div style={{ display:"flex", gap:8, marginTop:4, fontSize:8, color:"#2a3a55" }}>
+                <div style={{ display:"flex", gap:8, marginTop:4, fontSize:8, color:"#c8d4e8" }}>
                   <span>ATR {analysis.regime.atrPct}%</span>
                   <span>Dir {(parseFloat(analysis.regime.dirRatio||0)*100).toFixed(0)}%</span>
                   {analysis.regime.squeeze && <span style={{ color:"#ffcc00" }}>⚡SQUEEZE</span>}
@@ -4291,7 +4392,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
                 {analysis.divergences.map((d, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 4px", borderBottom: "1px solid #08081a", alignItems: "center" }}>
                     <span style={{ color: d.color, fontSize: 10, fontWeight: "bold" }}>{d.label}</span>
-                    <span style={{ color: "#2a3a55", fontSize: 8 }}>{d.idx2 - d.idx1}b ago</span>
+                    <span style={{ color: "#c8d4e8", fontSize: 8 }}>{d.idx2 - d.idx1}b ago</span>
                   </div>
                 ))}
               </div>
@@ -4309,7 +4410,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
                   return (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 4px", borderBottom: "1px solid #08081a", background: isCurrent ? "#ffffff08" : "transparent" }}>
                       <span style={{ color: lv.color, fontSize: 9 }}>{lv.label}</span>
-                      <span style={{ color: isCurrent ? "#ffffff" : "#8a9ab8", fontSize: 10, fontWeight: isCurrent ? "bold" : "normal" }}>{lv.price < 10 ? lv.price.toFixed(5) : lv.price.toFixed(2)}</span>
+                      <span style={{ color: isCurrent ? "#ffffff" : "#c8d4e8", fontSize: 10, fontWeight: isCurrent ? "bold" : "normal" }}>{lv.price < 10 ? lv.price.toFixed(5) : lv.price.toFixed(2)}</span>
                     </div>
                   );
                 })}
@@ -4320,14 +4421,14 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
           <div style={S.panel}>
             <div style={S.panelHead}>SMART MONEY</div>
             <div style={{ padding: 8, maxHeight: 180, overflowY: "auto" }}>
-              {!analysis?.smcSigs.length ? <div style={{ color: "#2a3a55", fontSize: 10 }}>No SMC signals</div>
+              {!analysis?.smcSigs.length ? <div style={{ color: "#c8d4e8", fontSize: 10 }}>No SMC signals</div>
                 : analysis.smcSigs.slice(-6).reverse().map((s, i) => {
                   const isBull = s.type?.includes("BULL") || s.type?.includes("LIQ_BULL");
                   return <div key={i} style={{ padding: "3px 0", borderBottom: "1px solid #0a0a1a" }}>
-                    <span style={{ fontSize: 9, color: "#2a3a55" }}>{typeIcon[s.type] || "◆"} </span>
+                    <span style={{ fontSize: 9, color: "#c8d4e8" }}>{typeIcon[s.type] || "◆"} </span>
                     <span style={{ color: isBull ? "#00ff9d" : "#ff3355", fontSize: 10 }}>{s.label}</span>
-                    {s.price && <div style={{ color: "#2a3a55", fontSize: 9 }}>@ {s.price?.toFixed(4)}</div>}
-                    {s.lo && <div style={{ color: "#2a3a55", fontSize: 9 }}>{s.lo?.toFixed(4)} – {s.hi?.toFixed(4)}</div>}
+                    {s.price && <div style={{ color: "#c8d4e8", fontSize: 9 }}>@ {s.price?.toFixed(4)}</div>}
+                    {s.lo && <div style={{ color: "#c8d4e8", fontSize: 9 }}>{s.lo?.toFixed(4)} – {s.hi?.toFixed(4)}</div>}
                   </div>;
                 })}
             </div>
@@ -4335,12 +4436,12 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
           <div style={S.panel}>
             <div style={S.panelHead}>SUPPORT / RESISTANCE</div>
             <div style={{ padding: 8 }}>
-              {!analysis?.srLvls.length ? <div style={{ color: "#2a3a55", fontSize: 10 }}>Calculating...</div>
+              {!analysis?.srLvls.length ? <div style={{ color: "#c8d4e8", fontSize: 10 }}>Calculating...</div>
                 : analysis.srLvls.map((l, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid #08081a" }}>
                     <span style={{ color: l.t === "R" ? "#ff3355" : "#00ff9d", fontWeight: "bold", fontSize: 10 }}>{l.t}</span>
                     <span style={{ color: "#c8d4e8", fontSize: 10 }}>{l.p < 10 ? l.p.toFixed(5) : l.p.toFixed(2)}</span>
-                    <span style={{ color: "#2a3a55", fontSize: 9 }}>{"★".repeat(Math.min(l.s, 4))}</span>
+                    <span style={{ color: "#c8d4e8", fontSize: 9 }}>{"★".repeat(Math.min(l.s, 4))}</span>
                   </div>
                 ))}
             </div>
@@ -4353,7 +4454,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
             <div style={{ borderBottom: "1px solid #0f1525" }}>
               {/* ── Row 1: MA / Bands ── */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderBottom: "1px solid #08081a", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, width: 38, flexShrink: 0 }}>MA/BB</span>
+                <span style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, width: 38, flexShrink: 0 }}>MA/BB</span>
                 {[
                   { key: "sma20",  label: "SMA 20",  col: "#00d4ff" },
                   { key: "sma50",  label: "SMA 50",  col: "#ff8c00" },
@@ -4362,14 +4463,14 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
                 ].map(ind => (
                   <button key={ind.key}
                     onClick={() => setIndicators(p => ({ ...p, [ind.key]: !p[ind.key] }))}
-                    style={{ background: indicators[ind.key] ? `${ind.col}22` : "transparent", border: `1px solid ${indicators[ind.key] ? ind.col : "#1a2a40"}`, color: indicators[ind.key] ? ind.col : "#3a4a60", padding: "2px 9px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "monospace", transition: "all .15s" }}>
+                    style={{ background: indicators[ind.key] ? `${ind.col}22` : "transparent", border: `1px solid ${indicators[ind.key] ? ind.col : "#4a5a7a"}`, color: indicators[ind.key] ? ind.col : "#3a4a60", padding: "2px 9px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "monospace", transition: "all .15s" }}>
                     {ind.label}
                   </button>
                 ))}
               </div>
               {/* ── Row 2: Studies ── */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderBottom: "1px solid #08081a", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, width: 38, flexShrink: 0 }}>STUDY</span>
+                <span style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, width: 38, flexShrink: 0 }}>STUDY</span>
                 {[
                   { key: "fib",    label: "Fibonacci",  col: "#ff8c00" },
                   { key: "div",    label: "Divergence", col: "#a855f7" },
@@ -4381,18 +4482,18 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
                 ].map(ind => (
                   <button key={ind.key}
                     onClick={() => setIndicators(p => ({ ...p, [ind.key]: !p[ind.key] }))}
-                    style={{ background: indicators[ind.key] ? `${ind.col}22` : "transparent", border: `1px solid ${indicators[ind.key] ? ind.col : "#1a2a40"}`, color: indicators[ind.key] ? ind.col : "#3a4a60", padding: "2px 9px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "monospace", transition: "all .15s" }}>
+                    style={{ background: indicators[ind.key] ? `${ind.col}22` : "transparent", border: `1px solid ${indicators[ind.key] ? ind.col : "#4a5a7a"}`, color: indicators[ind.key] ? ind.col : "#3a4a60", padding: "2px 9px", borderRadius: 3, cursor: "pointer", fontSize: 9, fontFamily: "monospace", transition: "all .15s" }}>
                     {ind.label}
                   </button>
                 ))}
                 <button
                   onClick={() => setIndicators({ sma20: false, sma50: false, sma200: false, bb: false, fib: false, div: false, sr: false, vol: false, vwap: false, pivots: false, vp: false })}
-                  style={{ background: "transparent", border: "1px solid #1a2a40", color: "#2a3a55", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontSize: 8, fontFamily: "monospace", marginLeft: 4 }}>
+                  style={{ background: "transparent", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontSize: 8, fontFamily: "monospace", marginLeft: 4 }}>
                   CLEAR ALL
                 </button>
                 <button
                   onClick={() => setIndicators({ sma20: true, sma50: false, sma200: false, bb: false, fib: true, div: true, sr: true, vol: true, vwap: false, pivots: false, vp: false })}
-                  style={{ background: "transparent", border: "1px solid #1a2a40", color: "#2a3a55", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontSize: 8, fontFamily: "monospace" }}>
+                  style={{ background: "transparent", border: "1px solid #4a5a7a", color: "#c8d4e8", padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontSize: 8, fontFamily: "monospace" }}>
                   RESET
                 </button>
                 {/* Sub-chart selector pushed right */}
@@ -4404,7 +4505,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
               </div>
               {/* ── Row 3: Drawing Tools ── */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, width: 38, flexShrink: 0 }}>DRAW</span>
+                <span style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, width: 38, flexShrink: 0 }}>DRAW</span>
                 {[
                   { id: "hline", label: "H-Line",    col: "#00d4ff", key: "H" },
                   { id: "tline", label: "Trendline",  col: "#ffcc00", key: "T" },
@@ -4413,7 +4514,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
                   <button key={tool.id}
                     onClick={() => setDrawTool(t => t === tool.id ? "none" : tool.id)}
                     title={`Shortcut: ${tool.key}`}
-                    style={{ background: drawTool === tool.id ? `${tool.col}28` : "transparent", border: `1px solid ${drawTool === tool.id ? tool.col : "#1a2a40"}`, color: drawTool === tool.id ? tool.col : "#3a4a60", padding: "2px 9px", borderRadius: 3, cursor: "crosshair", fontSize: 9, fontFamily: "monospace", transition: "all .15s", boxShadow: drawTool === tool.id ? `0 0 6px ${tool.col}44` : "none" }}>
+                    style={{ background: drawTool === tool.id ? `${tool.col}28` : "transparent", border: `1px solid ${drawTool === tool.id ? tool.col : "#4a5a7a"}`, color: drawTool === tool.id ? tool.col : "#3a4a60", padding: "2px 9px", borderRadius: 3, cursor: "crosshair", fontSize: 9, fontFamily: "monospace", transition: "all .15s", boxShadow: drawTool === tool.id ? `0 0 6px ${tool.col}44` : "none" }}>
                     {tool.label}
                   </button>
                 ))}
@@ -4428,14 +4529,14 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
             <div style={{ padding: "4px 0" }}>
               {candles.length > 0 && analysis
                 ? <CandleChart candles={candles} s20arr={analysis.s20} s50arr={analysis.s50} s200arr={analysis.s200} bbarr={analysis.bbarr} srLvls={analysis.srLvls} showSMA20={indicators.sma20} showSMA50={indicators.sma50} showSMA200={indicators.sma200} showBB={indicators.bb} showSR={indicators.sr} showVol={indicators.vol} fibData={indicators.fib ? analysis.fib : null} divergences={indicators.div ? analysis.divergences : []} vwapArr={indicators.vwap ? analysis.vwap : null} pivots={indicators.pivots ? analysis.pivots : null} drawTool={drawTool} drawings={activeDrawings} onAddDrawing={addDrawing} onDeleteDrawing={deleteDrawing} volProfile={indicators.vp ? analysis.volProfile : null} />
-                : <div style={{ height: 320, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#1a2a40", gap: 12 }}>
+                : <div style={{ height: 320, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#4a5a7a", gap: 12 }}>
                   <div style={{ fontSize: 36 }}>📊</div>
                   <div style={{ fontFamily: "monospace", fontSize: 11, letterSpacing: 2 }}>ENTER TICKER AND FETCH DATA</div>
                   <div style={{ fontSize: 8, color: "#0f1525" }}>YAHOO FINANCE + GROQ AI + SMC ENGINE</div>
                 </div>}
             </div>
             {candles.length > 0 && (
-              <div style={{ display: "flex", gap: 14, padding: "4px 12px 8px", fontSize: 9, color: "#2a3a55", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 14, padding: "4px 12px 8px", fontSize: 9, color: "#c8d4e8", flexWrap: "wrap" }}>
                 {indicators.sma20  && <span style={{ color: "#00d4ff", fontSize: 8 }}>— SMA20</span>}
                 {indicators.sma50  && <span style={{ color: "#ff8c00", fontSize: 8 }}>— SMA50</span>}
                 {indicators.sma200 && <span style={{ color: "#ff3355", fontSize: 8 }}>--- SMA200</span>}
@@ -4461,30 +4562,30 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
           <div style={S.panel}>
             <div style={{ padding: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: aiResult ? biasColor : "#1a2a40", boxShadow: aiResult ? `0 0 10px ${biasColor}` : "none" }} />
-                <span style={{ fontSize: 10, color: "#2a3a55", letterSpacing: 2 }}>NEXUS AI ENGINE</span>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: aiResult ? biasColor : "#4a5a7a", boxShadow: aiResult ? `0 0 10px ${biasColor}` : "none" }} />
+                <span style={{ fontSize: 10, color: "#c8d4e8", letterSpacing: 2 }}>NEXUS AI ENGINE</span>
               </div>
               {!groqKey && <div style={{ fontSize: 10, color: "#ffcc0080", marginBottom: 8, padding: "6px 8px", background: "#ffcc0010", borderRadius: 4, border: "1px solid #ffcc0030" }}>⚠ Set Groq API key in ⚙ Settings</div>}
               {aiResult && <>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div style={{ fontSize: 18, fontWeight: "bold", color: biasColor, letterSpacing: 3 }}>{aiResult.bias}</div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 9, color: "#2a3a55" }}>CONFIDENCE</div>
+                    <div style={{ fontSize: 9, color: "#c8d4e8" }}>CONFIDENCE</div>
                     <div style={{ fontSize: 16, fontWeight: "bold", color: aiResult.confidence > 70 ? "#00ff9d" : aiResult.confidence > 40 ? "#ffcc00" : "#ff3355" }}>{aiResult.confidence}%</div>
                   </div>
                 </div>
                 <div style={{ width: "100%", height: 4, background: "#0f1525", borderRadius: 2, marginBottom: 10 }}>
                   <div style={{ width: `${aiResult.confidence}%`, height: "100%", background: `linear-gradient(90deg,${biasColor},${biasColor}88)`, borderRadius: 2 }} />
                 </div>
-                <div style={{ fontSize: 10, color: "#8a9ab8", lineHeight: 1.6, marginBottom: 10 }}>{aiResult.summary}</div>
+                <div style={{ fontSize: 10, color: "#c8d4e8", lineHeight: 1.6, marginBottom: 10 }}>{aiResult.summary}</div>
                 {aiResult.trend && <div style={{ marginBottom: 10, padding: 8, background: "#0a0a18", borderRadius: 4 }}>
-                  {["short", "medium", "long"].map(t => <div key={t} style={{ display: "flex", gap: 8, padding: "2px 0", fontSize: 9 }}><span style={{ color: "#2a3a55", width: 46, flexShrink: 0 }}>{t.toUpperCase()}</span><span style={{ color: "#8a9ab8" }}>{aiResult.trend[t]}</span></div>)}
+                  {["short", "medium", "long"].map(t => <div key={t} style={{ display: "flex", gap: 8, padding: "2px 0", fontSize: 9 }}><span style={{ color: "#c8d4e8", width: 46, flexShrink: 0 }}>{t.toUpperCase()}</span><span style={{ color: "#c8d4e8" }}>{aiResult.trend[t]}</span></div>)}
                 </div>}
               </>}
-              {!aiResult && !aiLoading && candles.length > 0 && <div style={{ fontSize: 10, color: "#2a3a55", lineHeight: 1.8 }}>
+              {!aiResult && !aiLoading && candles.length > 0 && <div style={{ fontSize: 10, color: "#c8d4e8", lineHeight: 1.8 }}>
                 {["→ Multi-TF analysis", "→ Smart Money Concepts", "→ Trade setup + R:R", "→ Key level detection", "→ Risk assessment"].map(l => <div key={l}>{l}</div>)}
               </div>}
-              {aiLoading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 20, color: "#00d4ff" }}><div style={{ fontSize: 24, animation: "spin 1s linear infinite" }}>◈</div><div style={{ fontSize: 10, letterSpacing: 2, color: "#2a3a55" }}>ANALYZING...</div></div>}
+              {aiLoading && <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 20, color: "#00d4ff" }}><div style={{ fontSize: 24, animation: "spin 1s linear infinite" }}>◈</div><div style={{ fontSize: 10, letterSpacing: 2, color: "#c8d4e8" }}>ANALYZING...</div></div>}
             </div>
           </div>
           {aiResult?.setup && (
@@ -4497,16 +4598,16 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
                 </div>
                 {[["ENTRY", aiResult.setup.entry, "#c8d4e8"], ["STOP LOSS", aiResult.setup.stopLoss, "#ff3355"], ["TARGET 1", aiResult.setup.tp1, "#00ff9d"], ["TARGET 2", aiResult.setup.tp2, "#00ffa0"]].map(([k, v, col]) => v && (
                   <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #0a0a1a" }}>
-                    <span style={{ color: "#2a3a55", fontSize: 9 }}>{k}</span><span style={{ color: col, fontWeight: "bold", fontSize: 11 }}>{v}</span>
+                    <span style={{ color: "#c8d4e8", fontSize: 9 }}>{k}</span><span style={{ color: col, fontWeight: "bold", fontSize: 11 }}>{v}</span>
                   </div>
                 ))}
                 {aiResult.setup.rationale && <div style={{ marginTop: 8, fontSize: 9, color: "#5a6a88", lineHeight: 1.6, borderTop: "1px solid #0a0a1a", paddingTop: 8 }}>{aiResult.setup.rationale}</div>}
               </div>
             </div>
           )}
-          {aiResult?.keyLevels?.length > 0 && <div style={S.panel}><div style={S.panelHead}>KEY LEVELS</div><div style={{ padding: 8 }}>{aiResult.keyLevels.map((l, i) => <div key={i} style={{ padding: "3px 4px", borderBottom: "1px solid #08081a", fontSize: 9, color: "#8a9ab8", lineHeight: 1.5 }}>◈ {l}</div>)}</div></div>}
+          {aiResult?.keyLevels?.length > 0 && <div style={S.panel}><div style={S.panelHead}>KEY LEVELS</div><div style={{ padding: 8 }}>{aiResult.keyLevels.map((l, i) => <div key={i} style={{ padding: "3px 4px", borderBottom: "1px solid #08081a", fontSize: 9, color: "#c8d4e8", lineHeight: 1.5 }}>◈ {l}</div>)}</div></div>}
           {aiResult?.smartMoney && <div style={S.panel}><div style={S.panelHead}>🧠 SMART MONEY</div><div style={{ padding: 10, fontSize: 9, color: "#7a8aa8", lineHeight: 1.7 }}>{aiResult.smartMoney}</div></div>}
-          {aiResult?.indicators && <div style={S.panel}><div style={S.panelHead}>INDICATOR READS</div><div style={{ padding: 8 }}>{Object.entries(aiResult.indicators).map(([k, v]) => <div key={k} style={{ padding: "4px", borderBottom: "1px solid #08081a" }}><div style={{ fontSize: 8, color: "#2a3a55", letterSpacing: 1, textTransform: "uppercase", marginBottom: 2 }}>{k}</div><div style={{ fontSize: 9, color: "#8a9ab8", lineHeight: 1.5 }}>{v}</div></div>)}</div></div>}
+          {aiResult?.indicators && <div style={S.panel}><div style={S.panelHead}>INDICATOR READS</div><div style={{ padding: 8 }}>{Object.entries(aiResult.indicators).map(([k, v]) => <div key={k} style={{ padding: "4px", borderBottom: "1px solid #08081a" }}><div style={{ fontSize: 8, color: "#c8d4e8", letterSpacing: 1, textTransform: "uppercase", marginBottom: 2 }}>{k}</div><div style={{ fontSize: 9, color: "#c8d4e8", lineHeight: 1.5 }}>{v}</div></div>)}</div></div>}
           {aiResult?.watch && <div style={S.panel}><div style={S.panelHead}>👁 WATCH FOR</div><div style={{ padding: 10, fontSize: 9, color: "#ffcc0090", lineHeight: 1.7, borderLeft: "2px solid #ffcc0040" }}>{aiResult.watch}</div></div>}
           {aiResult?.risks && <div style={S.panel}><div style={S.panelHead}>⚠ RISKS</div><div style={{ padding: 10, fontSize: 9, color: "#ff335580", lineHeight: 1.7 }}>{aiResult.risks}</div></div>}
           <RiskCalculator setup={aiResult?.setup} lastPrice={last?.close} />
@@ -4514,13 +4615,13 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
           {/* AI CHAT */}
           <div style={S.panel}>
             <div onClick={() => setChatOpen(o => !o)} style={{ ...S.panelHead, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>💬 AI CHAT <span style={{ fontSize: 8, color: "#1a2a40", letterSpacing: 0 }}>(C)</span></span>
-              <span style={{ color: "#2a3a55" }}>{chatOpen ? "▲" : "▼"}</span>
+              <span>💬 AI CHAT <span style={{ fontSize: 8, color: "#4a5a7a", letterSpacing: 0 }}>(C)</span></span>
+              <span style={{ color: "#c8d4e8" }}>{chatOpen ? "▲" : "▼"}</span>
             </div>
             {chatOpen && <AIChatPanel ticker={ticker} tf={tf} analysis={analysis} candles={candles} groqKey={groqKey} groqModel={groqModel} />}
           </div>
 
-          <div style={{ padding: 8, fontSize: 8, color: "#1a2a40", lineHeight: 1.6, textAlign: "center" }}>NOT FINANCIAL ADVICE. EDUCATIONAL PURPOSES ONLY.</div>
+          <div style={{ padding: 8, fontSize: 8, color: "#4a5a7a", lineHeight: 1.6, textAlign: "center" }}>NOT FINANCIAL ADVICE. EDUCATIONAL PURPOSES ONLY.</div>
         </div>
       </div>
 
@@ -4533,11 +4634,11 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
           {BOTTOM_TABS.map(tab => (
             <button key={tab.id}
               onClick={() => { if (bottomTab === tab.id) setBottomOpen(o => !o); else { setBottomTab(tab.id); setBottomOpen(true); } }}
-              style={{ background: bottomTab === tab.id && bottomOpen ? "#06060f" : "transparent", border: "none", borderRight: "1px solid #0f1525", borderBottom: bottomTab === tab.id && bottomOpen ? "2px solid #00d4ff" : "2px solid transparent", color: bottomTab === tab.id && bottomOpen ? "#00d4ff" : "#2a3a55", padding: "9px 18px", cursor: "pointer", fontFamily: "monospace", fontSize: 10, letterSpacing: 1, transition: "color .15s" }}>
+              style={{ background: bottomTab === tab.id && bottomOpen ? "#06060f" : "transparent", border: "none", borderRight: "1px solid #0f1525", borderBottom: bottomTab === tab.id && bottomOpen ? "2px solid #00d4ff" : "2px solid transparent", color: bottomTab === tab.id && bottomOpen ? "#00d4ff" : "#c8d4e8", padding: "9px 18px", cursor: "pointer", fontFamily: "monospace", fontSize: 10, letterSpacing: 1, transition: "color .15s" }}>
               {tab.label}
             </button>
           ))}
-          <button onClick={() => setBottomOpen(o => !o)} style={{ marginLeft: "auto", background: "none", border: "none", borderLeft: "1px solid #0f1525", color: "#2a3a55", cursor: "pointer", padding: "0 16px", fontSize: 11 }}>{bottomOpen ? "▼" : "▲"}</button>
+          <button onClick={() => setBottomOpen(o => !o)} style={{ marginLeft: "auto", background: "none", border: "none", borderLeft: "1px solid #0f1525", color: "#c8d4e8", cursor: "pointer", padding: "0 16px", fontSize: 11 }}>{bottomOpen ? "▼" : "▲"}</button>
         </div>
         {bottomOpen && (
           <div style={{ maxHeight: 430, overflowY: "auto" }}>
@@ -4558,21 +4659,21 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
       {/* SETTINGS MODAL */}
       {showSettings && (
         <div style={{ position: "fixed", inset: 0, background: "#00000090", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setShowSettings(false)}>
-          <div style={{ background: "#0a0a18", border: "1px solid #1a2a40", borderRadius: 8, padding: 24, width: 420, maxWidth: "90vw" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "#0a0a18", border: "1px solid #4a5a7a", borderRadius: 8, padding: 24, width: 420, maxWidth: "90vw" }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 13, fontWeight: "bold", color: "#00d4ff", marginBottom: 16, letterSpacing: 2 }}>⚙ SETTINGS</div>
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 1, marginBottom: 6 }}>GROQ API KEY</div>
+              <div style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 1, marginBottom: 6 }}>GROQ API KEY</div>
               <input type="password" value={groqKey} onChange={e => setGroqKey(e.target.value)} style={S.inp} placeholder="gsk_..." />
-              <div style={{ fontSize: 8, color: "#2a3a55", marginTop: 4 }}>Free key at console.groq.com</div>
+              <div style={{ fontSize: 8, color: "#c8d4e8", marginTop: 4 }}>Free key at console.groq.com</div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 9, color: "#2a3a55", letterSpacing: 1, marginBottom: 6 }}>AI MODEL</div>
+              <div style={{ fontSize: 9, color: "#c8d4e8", letterSpacing: 1, marginBottom: 6 }}>AI MODEL</div>
               <select value={groqModel} onChange={e => setGroqModel(e.target.value)} style={{ ...S.inp, cursor: "pointer" }}>
                 {GROQ_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
-              <div style={{ fontSize: 8, color: "#2a3a55", marginTop: 4 }}>Recommended: llama-3.3-70b-versatile</div>
+              <div style={{ fontSize: 8, color: "#c8d4e8", marginTop: 4 }}>Recommended: llama-3.3-70b-versatile</div>
             </div>
-            <div style={{ background: "#0a0a18", border: "1px solid #1a2a40", borderRadius: 4, padding: 10, fontSize: 9, color: "#3a4a60", lineHeight: 1.9, marginBottom: 16 }}>
+            <div style={{ background: "#0a0a18", border: "1px solid #4a5a7a", borderRadius: 4, padding: 10, fontSize: 9, color: "#3a4a60", lineHeight: 1.9, marginBottom: 16 }}>
               📡 Market data: Yahoo Finance via corsproxy.io<br />
               🧠 AI brain: Groq Cloud (free tier)<br />
               💾 Watchlist, portfolio &amp; alerts saved to localStorage<br />
@@ -4588,7 +4689,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: #04040c; }
-        ::-webkit-scrollbar-thumb { background: #1a2a40; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb { background: #4a5a7a; border-radius: 2px; }
         select option { background: #0a0a18; color: #c8d4e8; }
         button:disabled { opacity: 0.5; cursor: not-allowed !important; }
       `}</style>
