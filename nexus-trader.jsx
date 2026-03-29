@@ -3011,7 +3011,7 @@ function ScreenerPanel({ onLoadTicker }) {
   return (
     <div style={{ padding: 12 }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ flex: 1, minWidth: 150 }}>
           <div style={{ fontSize: 8, color: "#e8f0f8", letterSpacing: 1, marginBottom: 4 }}>TICKERS (comma-separated, max 20)</div>
           <input value={tickers} onChange={e => setTickers(e.target.value.toUpperCase())} placeholder="AAPL, MSFT, TSLA..."
             style={{ background: "#04040c", border: "1px solid #6a7a9a", color: "#e8f0f8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 10, width: "100%" }} />
@@ -4277,16 +4277,16 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
 
   const S = {
     wrap: { background: "linear-gradient(135deg,#04040c 0%,#060611 100%)", minHeight: "100vh", width: "100vw", overflowX: "hidden", color: "#e8f0f8", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, boxSizing: "border-box" },
-    header: { background: "#06060f", borderBottom: "1px solid #1f2535", padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%", boxSizing: "border-box" },
+    header: { background: "#06060f", borderBottom: "1px solid #1f2535", padding: "6px 10px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%", boxSizing: "border-box" },
     logoText: { fontSize: 15, fontWeight: "bold", letterSpacing: 3, background: "linear-gradient(90deg,#00ff9d,#00d4ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
-    tickerInput: { background: "#0a0a1a", border: "1px solid #6a7a9a", color: "#00ff9d", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 13, fontWeight: "bold", width: 90, textTransform: "uppercase", letterSpacing: 2 },
-    tfBtn: (a) => ({ background: a ? "#0f2040" : "transparent", border: `1px solid ${a ? "#00d4ff" : "#6a7a9a"}`, color: a ? "#00d4ff" : "#5a6a8a", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontSize: 10, fontFamily: "monospace" }),
-    btn: (col = "#00d4ff") => ({ background: `${col}15`, border: `1px solid ${col}55`, color: col, padding: "6px 14px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 11, fontWeight: "bold", letterSpacing: 1 }),
+    tickerInput: { background: "#0a0a1a", border: "1px solid #6a7a9a", color: "#00ff9d", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 13, fontWeight: "bold", width: 85, textTransform: "uppercase", letterSpacing: 2 },
+    tfBtn: (a) => ({ background: a ? "#0f2040" : "transparent", border: `1px solid ${a ? "#00d4ff" : "#6a7a9a"}`, color: a ? "#00d4ff" : "#5a6a8a", padding: "3px 6px", borderRadius: 3, cursor: "pointer", fontSize: 10, fontFamily: "monospace" }),
+    btn: (col = "#00d4ff") => ({ background: `${col}15`, border: `1px solid ${col}55`, color: col, padding: "5px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", fontSize: 11, fontWeight: "bold", letterSpacing: 1 }),
     panel: { background: "#06060f", border: "1px solid #1f2535", borderRadius: 6 },
-    panelHead: { padding: "8px 12px", borderBottom: "1px solid #1f2535", fontSize: 10, color: "#e8f0f8", letterSpacing: 2 },
-    badge: (sig) => ({ display: "inline-block", background: `${sigCol[sig] || "#888"}18`, border: `1px solid ${sigCol[sig] || "#888"}40`, color: sigCol[sig] || "#888", padding: "2px 7px", borderRadius: 3, fontSize: 10, margin: "2px" }),
-    stat: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 12px", borderBottom: "1px solid #0a0a1a" },
-    inp: { background: "#04040c", border: "1px solid #6a7a9a", color: "#e8f0f8", padding: "8px 12px", borderRadius: 4, fontFamily: "monospace", fontSize: 12, width: "100%", boxSizing: "border-box" },
+    panelHead: { padding: "6px 10px", borderBottom: "1px solid #1f2535", fontSize: 10, color: "#e8f0f8", letterSpacing: 2 },
+    badge: (sig) => ({ display: "inline-block", background: `${sigCol[sig] || "#888"}18`, border: `1px solid ${sigCol[sig] || "#888"}40`, color: sigCol[sig] || "#888", padding: "2px 6px", borderRadius: 3, fontSize: 10, margin: "2px" }),
+    stat: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 10px", borderBottom: "1px solid #0a0a1a" },
+    inp: { background: "#04040c", border: "1px solid #6a7a9a", color: "#e8f0f8", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 12, width: "100%", boxSizing: "border-box" },
   };
 
   return (
@@ -4308,7 +4308,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
             placeholder="AAPL or search..." 
           />
           {showSearch && searchResults.length > 0 && (
-            <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 1000, background: "#0a0a1a", border: "1px solid #6a7a9a", borderRadius: 4, minWidth: 250, maxHeight: 300, overflowY: "auto" }}>
+            <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 1000, background: "#0a0a1a", border: "1px solid #6a7a9a", borderRadius: 4, minWidth: 200, maxWidth: 300, maxHeight: 300, overflowY: "auto" }}>
               {searchResults.map((r, i) => (
                 <div 
                   key={i} 
@@ -4338,7 +4338,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
       {error && <div style={{ background: "#ff335518", border: "1px solid #ff335540", color: "#ff3355", padding: "8px 16px", fontSize: 11 }}>⚠ {error} <button onClick={() => setError("")} style={{ background: "none", border: "none", color: "#ff3355", cursor: "pointer", float: "right" }}>✕</button></div>}
 
       {/* MAIN 3-COL GRID */}
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr 280px", gap: 6, padding: 6, width: "calc(100vw - 12px)", boxSizing: "border-box" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(400px, 2fr) minmax(260px, 1fr)", gap: 6, padding: 4, width: "100%", boxSizing: "border-box" }}>
         {/* LEFT */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {last && analysis && (
@@ -4628,7 +4628,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
       {/* ============================================================ */}
       {/* BOTTOM EXPANSION PANEL — Watchlist · Portfolio · Alerts · News */}
       {/* ============================================================ */}
-      <div style={{ margin: "0 6px 12px", background: "#06060f", border: "1px solid #1f2535", borderRadius: 6, overflow: "hidden", width: "calc(100% - 12px)", boxSizing: "border-box" }}>
+      <div style={{ margin: "0 4px 10px", background: "#06060f", border: "1px solid #1f2535", borderRadius: 6, overflow: "hidden", width: "calc(100% - 8px)", boxSizing: "border-box" }}>
         {/* Tab bar */}
         <div style={{ display: "flex", background: "#04040c", borderBottom: bottomOpen ? "1px solid #1f2535" : "none" }}>
           {BOTTOM_TABS.map(tab => (
