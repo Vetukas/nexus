@@ -4276,7 +4276,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
   const biasColor = aiResult?.bias === "BULLISH" ? "#00ff9d" : aiResult?.bias === "BEARISH" ? "#ff3355" : "#ffcc00";
 
   const S = {
-    wrap: { background: "linear-gradient(135deg,#04040c 0%,#060611 100%)", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden", color: "#e8f0f8", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, boxSizing: "border-box" },
+    wrap: { background: "linear-gradient(135deg,#04040c 0%,#060611 100%)", minHeight: "100vh", width: "100vw", overflowX: "hidden", color: "#e8f0f8", fontFamily: "'JetBrains Mono',monospace", fontSize: 12 },
     header: { background: "#06060f", borderBottom: "1px solid #1f2535", padding: "6px 10px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%", boxSizing: "border-box" },
     logoText: { fontSize: 15, fontWeight: "bold", letterSpacing: 3, background: "linear-gradient(90deg,#00ff9d,#00d4ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
     tickerInput: { background: "#0a0a1a", border: "1px solid #6a7a9a", color: "#00ff9d", padding: "5px 8px", borderRadius: 4, fontFamily: "monospace", fontSize: 13, fontWeight: "bold", width: 85, textTransform: "uppercase", letterSpacing: 2 },
@@ -4338,7 +4338,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
       {error && <div style={{ background: "#ff335518", border: "1px solid #ff335540", color: "#ff3355", padding: "8px 16px", fontSize: 11 }}>⚠ {error} <button onClick={() => setError("")} style={{ background: "none", border: "none", color: "#ff3355", cursor: "pointer", float: "right" }}>✕</button></div>}
 
       {/* MAIN 3-COL GRID */}
-      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 260px", gap: 6, padding: 4, width: "100%", boxSizing: "border-box" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 260px", gap: 6, padding: 4, width: "calc(100vw - 8px)", marginLeft: 4, boxSizing: "border-box" }}>
         {/* LEFT */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {last && analysis && (
