@@ -1912,7 +1912,7 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
   const currentCSData = entry?.confluenceBuckets?.[currentCSBkt];
 
   return (
-    <div style={{ padding: 10, display: "grid", gridTemplateColumns: "190px 1fr", gap: 10, minHeight: 380 }}>
+    <div style={{ padding: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, minHeight: 380 }}>
       {/* ── LEFT: asset list ── */}
       <div>
         <div style={{ fontSize: 8, color: "#e8f0f8", letterSpacing: 2, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
@@ -2003,11 +2003,11 @@ function AIMemoryPanel({ groqKey, currentTicker, currentTF, currentFV }) {
           {/* ── SIGNALS OVERVIEW ── */}
           {tab === "overview" && (
             <div style={{ maxHeight: 250, overflowY: "auto" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "58px 70px 42px 50px 38px 38px 38px 38px 38px 38px 48px 1fr", padding: "3px 6px", borderBottom: "1px solid #1f2535", background: "#04040c", position: "sticky", top: 0 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "52px 64px 38px 46px 34px 34px 34px 34px 34px 34px 44px 1fr", padding: "3px 6px", borderBottom: "1px solid #1f2535", background: "#04040c", position: "sticky", top: 0 }}>
                 {["DATE","BIAS","CONF","DIR","CS","RSI","MACD","PAT","SMC","DIV","P&L","RESULT"].map((h,i) => <div key={i} style={{ fontSize: 7, color: "#e8f0f8" }}>{h}</div>)}
               </div>
               {sigs.map((s, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "58px 70px 42px 50px 38px 38px 38px 38px 38px 38px 48px 1fr", padding: "4px 6px", borderBottom: "1px solid #08081a", background: s.correct ? "#001508" : i%2===0 ? "#06060f" : "#04040e", alignItems: "center" }}>
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "52px 64px 38px 46px 34px 34px 34px 34px 34px 34px 44px 1fr", padding: "4px 6px", borderBottom: "1px solid #08081a", background: s.correct ? "#001508" : i%2===0 ? "#06060f" : "#04040e", alignItems: "center" }}>
                   <span style={{ fontSize: 7, color: "#5a6a80" }}>{s.date}</span>
                   <span style={{ fontSize: 8, fontWeight: "bold", color: biasC[s.bias]||"#888" }}>{s.bias}</span>
                   <span style={{ fontSize: 8, color: (s.confidence||0)>=70?"#a855f7":"#e8f0f8" }}>{s.confidence}%</span>
@@ -2403,11 +2403,11 @@ function PortfolioPanel({ currentTicker, currentPrice }) {
         positions.length === 0
           ? <div style={{ color: "#6a7a9a", fontFamily: "monospace", fontSize: 10, padding: "16px", textAlign: "center" }}>No open positions.</div>
           : <div style={{ background: "#06060f", border: "1px solid #1f2535", borderRadius: 6, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "60px 55px 70px 80px 90px 80px 1fr 36px", padding: "5px 10px", borderBottom: "1px solid #1f2535" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "54px 50px 64px 74px 84px 74px 1fr 32px", padding: "5px 10px", borderBottom: "1px solid #1f2535" }}>
               {["SYM", "DIR", "QTY", "ENTRY", "LIVE", "P&L", "NOTE", ""].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#e8f0f8", letterSpacing: 1 }}>{h}</div>)}
             </div>
             {positions.map(pos => { const p = getP(pos); return (
-              <div key={pos.id} style={{ display: "grid", gridTemplateColumns: "60px 55px 70px 80px 90px 80px 1fr 36px", padding: "7px 10px", borderBottom: "1px solid #08081a", alignItems: "center" }}>
+              <div key={pos.id} style={{ display: "grid", gridTemplateColumns: "54px 50px 64px 74px 84px 74px 1fr 32px", padding: "7px 10px", borderBottom: "1px solid #08081a", alignItems: "center" }}>
                 <div style={{ fontWeight: "bold", color: "#e8f0f8", fontSize: 11 }}>{pos.sym}</div>
                 <div style={{ color: pos.dir === "LONG" ? "#00ff9d" : "#ff3355", fontSize: 10, fontWeight: "bold" }}>{pos.dir}</div>
                 <div style={{ color: "#e8f0f8", fontSize: 10 }}>{pos.qty}</div>
@@ -2423,11 +2423,11 @@ function PortfolioPanel({ currentTicker, currentPrice }) {
         history.length === 0
           ? <div style={{ color: "#6a7a9a", fontFamily: "monospace", fontSize: 10, padding: "16px", textAlign: "center" }}>No closed trades yet.</div>
           : <div style={{ background: "#06060f", border: "1px solid #1f2535", borderRadius: 6, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "60px 55px 80px 80px 80px 1fr", padding: "5px 10px", borderBottom: "1px solid #1f2535" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "54px 50px 74px 74px 74px 1fr", padding: "5px 10px", borderBottom: "1px solid #1f2535" }}>
               {["SYM", "DIR", "ENTRY", "P&L", "$P&L", "CLOSED"].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#e8f0f8", letterSpacing: 1 }}>{h}</div>)}
             </div>
             {history.map((h, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 55px 80px 80px 80px 1fr", padding: "7px 10px", borderBottom: "1px solid #08081a", alignItems: "center" }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "54px 50px 74px 74px 74px 1fr", padding: "7px 10px", borderBottom: "1px solid #08081a", alignItems: "center" }}>
                 <div style={{ fontWeight: "bold", color: "#e8f0f8", fontSize: 11 }}>{h.sym}</div>
                 <div style={{ color: h.dir === "LONG" ? "#00ff9d60" : "#ff335560", fontSize: 10 }}>{h.dir}</div>
                 <div style={{ color: "#5a6a80", fontSize: 10 }}>{h.entry < 10 ? h.entry.toFixed(4) : h.entry.toFixed(2)}</div>
@@ -2745,16 +2745,16 @@ function MultiTimeframePanel({ ticker }) {
       {!loading && rows.length > 0 && (
         <>
           {/* Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "52px 60px 56px 60px 80px 80px 80px 1fr", padding: "5px 10px", borderBottom: "1px solid #1f2535", background: "#04040c", borderRadius: "4px 4px 0 0" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "48px 56px 52px 56px 70px 70px 70px 1fr", padding: "5px 10px", borderBottom: "1px solid #1f2535", background: "#04040c", borderRadius: "4px 4px 0 0" }}>
             {["TF", "BIAS", "SCORE", "RSI", "MACD", "SMA20", "SMA50", "TREND / PATTERNS"].map((h, i) => <div key={i} style={{ fontSize: 8, color: "#e8f0f8", letterSpacing: 1 }}>{h}</div>)}
           </div>
           {rows.map((r, i) => r.err ? (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "52px 60px 56px 60px 80px 80px 80px 1fr", padding: "9px 10px", borderBottom: "1px solid #08081a", background: "#06060f" }}>
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 56px 52px 56px 70px 70px 70px 1fr", padding: "9px 10px", borderBottom: "1px solid #08081a", background: "#06060f" }}>
               <span style={{ fontWeight: "bold", color: "#5a6a8a", fontSize: 11 }}>{r.tf}</span>
               <span style={{ color: "#e8f0f8", fontSize: 9, gridColumn: "2 / -1" }}>{r.err}</span>
             </div>
           ) : (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "52px 60px 56px 60px 80px 80px 80px 1fr", padding: "9px 10px", borderBottom: "1px solid #08081a", background: i % 2 === 0 ? "#06060f" : "#04040e", alignItems: "center" }}>
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 56px 52px 56px 70px 70px 70px 1fr", padding: "9px 10px", borderBottom: "1px solid #08081a", background: i % 2 === 0 ? "#06060f" : "#04040e", alignItems: "center" }}>
               <span style={{ fontWeight: "bold", color: "#e8f0f8", fontSize: 12 }}>{r.tf}</span>
               <span style={{ fontWeight: "bold", color: biasC[r.bias] || "#888", fontSize: 11, border: `1px solid ${biasC[r.bias] || "#888"}40`, padding: "2px 6px", borderRadius: 3, width: "fit-content" }}>{r.bias}</span>
               <span>
@@ -3036,12 +3036,12 @@ function ScreenerPanel({ onLoadTicker }) {
       )}
       {filtered.length > 0 && (
         <div style={{ background: "#04040c", borderRadius: 4, overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "70px 80px 70px 56px 70px 70px 70px 70px 1fr", padding: "5px 10px", borderBottom: "1px solid #1f2535" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "64px 74px 64px 52px 64px 64px 64px 64px 1fr", padding: "5px 10px", borderBottom: "1px solid #1f2535" }}>
             {["SYM","PRICE","CHG%","RSI","SMA20","SMA50","ATR%","SCORE","SIGNALS"].map((h,i) => <div key={i} style={{ fontSize: 8, color: "#e8f0f8", letterSpacing: 1 }}>{h}</div>)}
           </div>
           {filtered.map((r, i) => (
             <div key={r.sym} onClick={() => onLoadTicker(r.sym)}
-              style={{ display: "grid", gridTemplateColumns: "70px 80px 70px 56px 70px 70px 70px 70px 1fr", padding: "8px 10px", borderBottom: "1px solid #08081a", background: i % 2 === 0 ? "#06060f" : "#04040e", cursor: "pointer", alignItems: "center" }}>
+              style={{ display: "grid", gridTemplateColumns: "64px 74px 64px 52px 64px 64px 64px 64px 1fr", padding: "8px 10px", borderBottom: "1px solid #08081a", background: i % 2 === 0 ? "#06060f" : "#04040e", cursor: "pointer", alignItems: "center" }}>
               <span style={{ fontWeight: "bold", color: "#e8f0f8", fontSize: 12 }}>{r.sym}</span>
               <span style={{ color: "#e8f0f8", fontSize: 11, fontWeight: "bold" }}>{r.price < 10 ? r.price.toFixed(4) : r.price.toFixed(2)}</span>
               <span style={{ color: r.pct >= 0 ? "#00ff9d" : "#ff3355", fontSize: 11, fontWeight: "bold" }}>{r.pct >= 0 ? "+" : ""}{r.pct.toFixed(2)}%</span>
@@ -3463,12 +3463,12 @@ Based on ALL above signals, reply ONLY with JSON:
       {/* ── Results table ── */}
       {tab === "results" && results.length > 0 && (
         <div style={{ background: "#04040c", borderRadius: 4, overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "54px 70px 55px 40px 42px 70px 70px 60px 55px 50px 1fr", padding: "4px 8px", borderBottom: "1px solid #1f2535", position: "sticky", top: 0, background: "#04040c" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "48px 64px 50px 36px 38px 64px 64px 56px 50px 46px 1fr", padding: "4px 8px", borderBottom: "1px solid #1f2535", position: "sticky", top: 0, background: "#04040c" }}>
             {["DATE","BIAS","DIR","CONF","CS","ENTRY","EXIT","P&L","EXIT WHY","BARS","SIGNALS"].map((h,i)=><div key={i} style={{fontSize:7,color:"#e8f0f8"}}>{h}</div>)}
           </div>
           <div style={{ maxHeight: 280, overflowY: "auto" }}>
             {results.map((r, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "54px 70px 55px 40px 42px 70px 70px 60px 55px 50px 1fr", padding: "5px 8px", borderBottom: "1px solid #08081a", background: r.hit ? "#001508" : r.direction==="WAIT" ? "#06060f" : "#15000808", alignItems: "center" }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 64px 50px 36px 38px 64px 64px 56px 50px 46px 1fr", padding: "5px 8px", borderBottom: "1px solid #08081a", background: r.hit ? "#001508" : r.direction==="WAIT" ? "#06060f" : "#15000808", alignItems: "center" }}>
                 <span style={{ fontSize: 7, color: "#5a6a80" }}>{r.date}</span>
                 <span style={{ fontSize: 8, fontWeight: "bold", color: biasC[r.bias]||"#888" }}>{r.bias}</span>
                 <span style={{ fontSize: 8, color: r.direction==="LONG"?"#00ff9d":r.direction==="SHORT"?"#ff3355":"#ffcc00" }}>{r.direction}</span>
