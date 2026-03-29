@@ -4277,7 +4277,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
 
   const S = {
     wrap: { background: "linear-gradient(135deg,#04040c 0%,#060611 100%)", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden", color: "#e8f0f8", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, boxSizing: "border-box" },
-    header: { background: "#06060f", borderBottom: "1px solid #1f2535", padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%", boxSizing: "border-box" },
+    header: { background: "#06060f", borderBottom: "1px solid #1f2535", padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%", boxSizing: "border-box", maxWidth: "100vw" },
     logoText: { fontSize: 15, fontWeight: "bold", letterSpacing: 3, background: "linear-gradient(90deg,#00ff9d,#00d4ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" },
     tickerInput: { background: "#0a0a1a", border: "1px solid #6a7a9a", color: "#00ff9d", padding: "6px 10px", borderRadius: 4, fontFamily: "monospace", fontSize: 13, fontWeight: "bold", width: 90, textTransform: "uppercase", letterSpacing: 2 },
     tfBtn: (a) => ({ background: a ? "#0f2040" : "transparent", border: `1px solid ${a ? "#00d4ff" : "#6a7a9a"}`, color: a ? "#00d4ff" : "#5a6a8a", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontSize: 10, fontFamily: "monospace" }),
@@ -4338,7 +4338,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
       {error && <div style={{ background: "#ff335518", border: "1px solid #ff335540", color: "#ff3355", padding: "8px 16px", fontSize: 11 }}>⚠ {error} <button onClick={() => setError("")} style={{ background: "none", border: "none", color: "#ff3355", cursor: "pointer", float: "right" }}>✕</button></div>}
 
       {/* MAIN 3-COL GRID */}
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr 280px", gap: 6, padding: 6, width: "calc(100% - 12px)", boxSizing: "border-box", marginLeft: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr 280px", gap: 6, padding: 6, width: "100%", boxSizing: "border-box" }}>
         {/* LEFT */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {last && analysis && (
@@ -4628,7 +4628,7 @@ ${memoryCtx ? memoryCtx + "\n" : ""}Reply ONLY raw JSON: {"bias":"BULLISH"|"BEAR
       {/* ============================================================ */}
       {/* BOTTOM EXPANSION PANEL — Watchlist · Portfolio · Alerts · News */}
       {/* ============================================================ */}
-      <div style={{ margin: "0 8px 12px", background: "#06060f", border: "1px solid #1f2535", borderRadius: 6, overflow: "hidden" }}>
+      <div style={{ margin: "0 6px 12px", background: "#06060f", border: "1px solid #1f2535", borderRadius: 6, overflow: "hidden", width: "calc(100% - 12px)", boxSizing: "border-box" }}>
         {/* Tab bar */}
         <div style={{ display: "flex", background: "#04040c", borderBottom: bottomOpen ? "1px solid #1f2535" : "none" }}>
           {BOTTOM_TABS.map(tab => (
